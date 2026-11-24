@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const playfair = Playfair_Display({
+  variable: "--font-serif",
   subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "VetoAI — Contract X-Ray & Legal Trap Detection",
+  title: "VetoAI — Spot Every Trap Before You Sign",
   description:
-    "Educational document-risk reviewer with native PDF/DOCX/TXT file scanning. Detect training bonds, rental traps, and unfair clauses with instant negotiation scripts.",
+    "Ultra-minimal, plain-English contract risk scanner. Scan PDF, DOCX, or text to detect training bonds, rental traps, and missing safeguards with instant counter-proposals.",
 };
 
 export default function RootLayout({
@@ -26,9 +29,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark antialiased`}
+      className={`${inter.variable} ${playfair.variable} dark antialiased`}
     >
-      <body className="min-h-screen bg-[#0B0F19] text-slate-100 selection:bg-cyan-400 selection:text-slate-950 antialiased">
+      <body className="min-h-screen bg-[#05070C] text-[#F8FAFC] selection:bg-[#D4FF2A] selection:text-[#05070C] font-sans antialiased">
         {children}
       </body>
     </html>

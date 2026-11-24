@@ -68,6 +68,7 @@ export default function HomePage() {
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [displayScore, setDisplayScore] = useState(0);
   const [copied, setCopied] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -83,10 +84,31 @@ export default function HomePage() {
 
     const interval = setInterval(() => {
       setActiveStep((prev) => (prev < SCAN_STEPS.length - 1 ? prev + 1 : prev));
-    }, 1600);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [loading]);
+
+  // Smooth SVG Score gauge animation on result change
+  useEffect(() => {
+    if (!result) return;
+
+    const target = result.riskScore;
+    let startTimestamp: number | null = null;
+    const duration = 900; // ms
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      setDisplayScore(Math.round(progress * target));
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      }
+    };
+
+    const animFrame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(animFrame);
+  }, [result]);
 
   const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -129,6 +151,7 @@ export default function HomePage() {
 
     setLoading(true);
     setActiveStep(0);
+    setDisplayScore(0);
     setError(null);
     setResult(null);
 
@@ -164,7 +187,7 @@ export default function HomePage() {
       const message =
         err instanceof Error
           ? err.message
-          : "Unable to scan document. Please check your network and Gemini API configuration.";
+          : "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.";
       setError(message);
     } finally {
       setLoading(false);
@@ -191,7 +214,7 @@ export default function HomePage() {
         stroke: "stroke-rose-500",
         text: "text-rose-400",
         border: "border-l-rose-500",
-        glow: "shadow-rose-950/40",
+        verdict: "High Risk — Don't sign as-is",
         dot: "bg-rose-500",
         label: "High Risk",
       };
@@ -202,18 +225,18 @@ export default function HomePage() {
         stroke: "stroke-amber-400",
         text: "text-amber-400",
         border: "border-l-amber-400",
-        glow: "shadow-amber-950/40",
+        verdict: "Medium Risk — Ask for changes",
         dot: "bg-amber-400",
         label: "Medium Risk",
       };
     }
     return {
       badgeBg: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300",
-      stroke: "stroke-emerald-400",
-      text: "text-emerald-400",
-      border: "border-l-emerald-400",
-      glow: "shadow-emerald-950/40",
-      dot: "bg-emerald-400",
+      stroke: "stroke-[#D4FF2A]",
+      text: "text-[#D4FF2A]",
+      border: "border-l-[#D4FF2A]",
+      verdict: "Low Risk — Looks fair",
+      dot: "bg-[#D4FF2A]",
       label: "Low Risk",
     };
   };
@@ -223,25 +246,24 @@ export default function HomePage() {
     : getRiskMeta(50);
 
   // SVG Gauge calculations
-  const radius = 50;
+  const radius = 48;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = result
-    ? circumference - (circumference * result.riskScore) / 100
-    : circumference;
+  const strokeDashoffset = circumference - (circumference * displayScore) / 100;
 
   return (
-    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black">
-      {/* Glow Backdrop */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[350px] bg-gradient-to-b from-cyan-600/10 via-indigo-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
+    <div className="min-h-screen bg-[#05070C] text-[#F8FAFC] flex flex-col font-sans selection:bg-[#D4FF2A] selection:text-[#05070C] relative">
+      {/* Soft Cobalt Blue Radial Glow behind Hero */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[520px] bg-gradient-to-b from-[#2563EB]/15 via-[#2563EB]/5 to-transparent blur-3xl pointer-events-none -z-10" />
 
-      {/* Top Bar */}
-      <header className="sticky top-0 z-40 bg-[#0B0F19]/80 backdrop-blur-xl border-b border-slate-800/80">
+      {/* Top Navbar */}
+      <header className="sticky top-0 z-40 bg-[#05070C]/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 via-blue-600 to-indigo-600 p-[1px] shadow-lg shadow-cyan-500/20">
-              <div className="w-full h-full bg-[#0B0F19] rounded-[11px] flex items-center justify-center">
+            {/* VetoAI Shield Mark */}
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#D4FF2A] via-[#60A5FA] to-[#2563EB] p-[1.5px] shadow-lg shadow-[#D4FF2A]/10">
+              <div className="w-full h-full bg-[#05070C] rounded-[10px] flex items-center justify-center">
                 <svg
-                  className="w-5 h-5 text-cyan-400"
+                  className="w-5 h-5 text-[#D4FF2A]"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -253,48 +275,74 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">
-                VetoAI
-              </span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-500/30">
-                X-Ray Scan
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-extrabold tracking-tight text-white">
+                Veto<span className="text-[#60A5FA]">AI</span>
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-900/90 text-slate-300 border border-slate-700/80 shadow-inner">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400"></span>
-              Educational Risk Review • Not Legal Advice
+            <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-[#D4FF2A]/10 text-[#D4FF2A] border border-[#D4FF2A]/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#D4FF2A] animate-pulse"></span>
+              EDUCATIONAL REVIEW • NOT LEGAL ADVICE
             </span>
           </div>
         </div>
       </header>
 
-      {/* Hero Headline */}
-      <section className="pt-8 pb-4 text-center px-4">
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white">
-          Contract <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">X-Ray</span> Scanner
+      {/* Hero Section */}
+      <section className="pt-12 pb-8 text-center px-4 max-w-4xl mx-auto">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15] text-[#F8FAFC]">
+          <span className="font-serif italic font-normal text-[#D4FF2A] mr-2">Spot</span>
+          Every <span className="text-[#60A5FA]">Trap</span> Before You Sign.
         </h1>
-        <p className="mt-2 text-sm sm:text-base text-slate-400 max-w-xl mx-auto">
-          Drop your PDF, DOCX, or paste any contract. VetoAI exposes predatory training bonds, deposit traps, and drafts your negotiation response.
+        <p className="mt-4 text-[#CBD5E1] text-[15px] sm:text-base leading-relaxed max-w-xl mx-auto font-normal">
+          Instant plain-English document audit for students, tenants, and freshers. Expose bonds, deposit traps, and generate your pushback script in seconds.
         </p>
+
+        {/* Minimal 3-Column Hairline Strip */}
+        <div className="mt-8 max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-white/10 rounded-2xl border border-white/10 bg-[#0B101D]/70 backdrop-blur-md">
+          <div className="py-3 px-4 text-center">
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#D4FF2A] block">
+              01 / TRAP SCAN
+            </span>
+            <span className="text-xs text-[#CBD5E1] mt-0.5 block">
+              Bonds, exit fees & IP grabs
+            </span>
+          </div>
+          <div className="py-3 px-4 text-center">
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#60A5FA] block">
+              02 / MISSING RIGHTS
+            </span>
+            <span className="text-xs text-[#CBD5E1] mt-0.5 block">
+              Absent refunds & notice terms
+            </span>
+          </div>
+          <div className="py-3 px-4 text-center">
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-white block">
+              03 / PUSHBACK EMAIL
+            </span>
+            <span className="text-xs text-[#CBD5E1] mt-0.5 block">
+              Polite counter-proposal ready
+            </span>
+          </div>
+        </div>
       </section>
 
       {/* Split Screen Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT PANEL: Document Input & File Upload */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 pb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+          {/* LEFT PANEL: Ingestion & Upload */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="bg-[#111827]/90 rounded-2xl border border-slate-800 shadow-2xl p-5 sm:p-6 backdrop-blur-md">
+            <div className="bg-[#0B101D]/90 rounded-2xl border border-white/10 shadow-2xl p-6 sm:p-7 backdrop-blur-md relative">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                  Document Input
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA]"></span>
+                  Upload or Paste
                 </span>
-                <span className="text-[11px] text-slate-400">
-                  PDF • DOCX • TXT (Max 4 MB)
+                <span className="text-[11px] text-[#CBD5E1] font-mono">
+                  PDF • DOCX • TXT (≤ 4 MB)
                 </span>
               </div>
 
@@ -307,10 +355,10 @@ export default function HomePage() {
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleFileDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`relative rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
+                className={`relative rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
                   isDragging
-                    ? "border-cyan-400 bg-cyan-950/20 shadow-lg shadow-cyan-500/10 scale-[1.01]"
-                    : "border-slate-700 hover:border-slate-600 bg-slate-900/60 hover:bg-slate-900/90"
+                    ? "border-[#D4FF2A] bg-[#D4FF2A]/5 shadow-[0_0_24px_rgba(212,255,42,0.15)] scale-[1.01]"
+                    : "border-white/15 hover:border-[#60A5FA]/60 bg-[#05070C]/60 hover:bg-[#05070C]/90"
                 }`}
               >
                 <input
@@ -321,10 +369,10 @@ export default function HomePage() {
                   onChange={handleFileChange}
                 />
 
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-center text-cyan-400">
+                <div className="flex flex-col items-center justify-center gap-2.5">
+                  <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#60A5FA]">
                     <svg
-                      className="w-6 h-6"
+                      className="w-5 h-5"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -336,11 +384,11 @@ export default function HomePage() {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-200">
-                      Drag & drop your contract file
+                    <p className="text-sm font-semibold text-[#F8FAFC]">
+                      Drop contract file here
                     </p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      or <span className="text-cyan-400 underline">browse files</span> (.pdf, .docx, .txt)
+                    <p className="text-xs text-[#CBD5E1] mt-0.5">
+                      or <span className="text-[#60A5FA] underline">browse files</span> (.pdf, .docx, .txt)
                     </p>
                   </div>
                 </div>
@@ -348,16 +396,16 @@ export default function HomePage() {
 
               {/* Selected File Card */}
               {selectedFile && (
-                <div className="mt-3 p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/40 flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="mt-3 p-3 rounded-xl bg-white/5 border border-[#60A5FA]/40 flex items-center justify-between gap-3 animate-fade-up">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 text-xs font-mono font-bold uppercase shrink-0">
+                    <span className="px-2 py-0.5 rounded bg-[#60A5FA]/20 text-[#60A5FA] text-xs font-mono font-bold uppercase shrink-0">
                       {selectedFile.name.split(".").pop()}
                     </span>
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-white truncate">
                         {selectedFile.name}
                       </p>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-[11px] text-[#CBD5E1]">
                         {(selectedFile.size / 1024).toFixed(1)} KB
                       </p>
                     </div>
@@ -385,14 +433,14 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* Divider */}
+              {/* Textarea Divider */}
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-800" />
+                  <div className="w-full border-t border-white/10" />
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-[#111827] px-2 text-slate-500 font-semibold">
-                    or paste contract text
+                <div className="relative flex justify-center text-xs uppercase font-mono">
+                  <span className="bg-[#0B101D] px-2 text-[#CBD5E1] font-semibold text-[11px]">
+                    or paste clause text
                   </span>
                 </div>
               </div>
@@ -404,16 +452,16 @@ export default function HomePage() {
                   value={documentText}
                   onChange={(e) => setDocumentText(e.target.value)}
                   placeholder="Paste clause or offer letter text here... (min. 50 characters)"
-                  className="w-full p-3.5 rounded-xl border border-slate-800 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition text-xs sm:text-sm text-slate-200 placeholder-slate-500 bg-slate-900/80 resize-y font-mono"
+                  className="w-full p-4 rounded-xl border border-white/10 focus:border-[#60A5FA] focus:ring-1 focus:ring-[#60A5FA]/50 transition text-sm text-[#F8FAFC] placeholder-slate-500 bg-[#05070C]/80 resize-y font-mono leading-relaxed"
                 />
               </div>
 
-              {/* Character & Action Bar */}
+              {/* Character Bar */}
               <div className="mt-2.5 flex items-center justify-between text-xs">
                 <span
-                  className={`font-mono ${
+                  className={`font-mono text-xs ${
                     characterCount >= 50
-                      ? "text-emerald-400"
+                      ? "text-[#D4FF2A]"
                       : "text-slate-500"
                   }`}
                 >
@@ -424,7 +472,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setDocumentText("")}
-                    className="text-slate-400 hover:text-slate-200 underline"
+                    className="text-[#CBD5E1] hover:text-white underline underline-offset-2"
                   >
                     Clear text
                   </button>
@@ -432,9 +480,9 @@ export default function HomePage() {
               </div>
 
               {/* Pre-loaded Sample Buttons */}
-              <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-400 block uppercase tracking-wider">
-                  Test realistic trap clauses:
+              <div className="mt-5 pt-4 border-t border-white/10 space-y-2">
+                <span className="text-[11px] font-mono font-semibold text-[#CBD5E1] block uppercase tracking-wider">
+                  Test sample contracts:
                 </span>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
@@ -443,11 +491,11 @@ export default function HomePage() {
                       removeFile();
                       setDocumentText(SAMPLE_INTERNSHIP);
                     }}
-                    className="flex-1 text-left px-3 py-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 text-xs text-slate-200 font-medium transition-colors flex items-center gap-2 group"
+                    className="flex-1 text-left px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-[#CBD5E1] font-medium transition-colors flex items-center gap-2 group"
                   >
-                    <span className="text-cyan-400">💼</span>
-                    <span className="truncate group-hover:text-cyan-300">
-                      Sample Internship Offer
+                    <span>💼</span>
+                    <span className="truncate group-hover:text-white">
+                      Internship Offer (Bond Trap)
                     </span>
                   </button>
                   <button
@@ -456,32 +504,32 @@ export default function HomePage() {
                       removeFile();
                       setDocumentText(SAMPLE_RENTAL);
                     }}
-                    className="flex-1 text-left px-3 py-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 text-xs text-slate-200 font-medium transition-colors flex items-center gap-2 group"
+                    className="flex-1 text-left px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-[#CBD5E1] font-medium transition-colors flex items-center gap-2 group"
                   >
-                    <span className="text-amber-400">🏠</span>
-                    <span className="truncate group-hover:text-amber-300">
-                      Sample Rental Agreement
+                    <span>🏠</span>
+                    <span className="truncate group-hover:text-white">
+                      Rental Agreement (Deposit Trap)
                     </span>
                   </button>
                 </div>
               </div>
 
-              {/* Run X-Ray Scan Button */}
-              <div className="mt-5">
+              {/* Primary Pill Action: Run X-Ray Scan → */}
+              <div className="mt-6">
                 <button
                   type="button"
                   disabled={!canScan || loading}
                   onClick={handleScan}
-                  className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2.5 ${
+                  className={`w-full py-4 px-8 rounded-full font-bold text-sm tracking-wide transition-all duration-200 flex items-center justify-center gap-2 ${
                     !canScan || loading
-                      ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50"
-                      : "bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-cyan-500/25 active:scale-[0.99] border border-cyan-400/30"
+                      ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5"
+                      : "bg-[#D4FF2A] hover:bg-[#c2ed18] text-[#05070C] shadow-[0_0_24px_rgba(212,255,42,0.25)] hover:shadow-[0_0_32px_rgba(212,255,42,0.4)] active:scale-[0.98]"
                   }`}
                 >
                   {loading ? (
                     <>
                       <svg
-                        className="animate-spin h-4 w-4 text-white"
+                        className="animate-spin h-4 w-4 text-[#05070C]"
                         fill="none"
                         viewBox="0 0 24 24"
                       >
@@ -503,24 +551,8 @@ export default function HomePage() {
                     </>
                   ) : (
                     <>
-                      <svg
-                        className="w-4 h-4 text-cyan-200"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="2" x2="12" y2="6" />
-                        <line x1="12" y1="18" x2="12" y2="22" />
-                        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
-                        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
-                        <line x1="2" y1="12" x2="6" y2="12" />
-                        <line x1="18" y1="12" x2="22" y2="12" />
-                        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" />
-                        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" />
-                      </svg>
                       <span>Run X-Ray Scan</span>
+                      <span className="text-base leading-none">→</span>
                     </>
                   )}
                 </button>
@@ -528,7 +560,7 @@ export default function HomePage() {
 
               {/* Error Box */}
               {error && (
-                <div className="mt-4 p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/50 text-rose-300 text-xs flex items-start gap-2.5">
+                <div className="mt-4 p-4 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-3">
                   <svg
                     className="w-4 h-4 text-rose-400 shrink-0 mt-0.5"
                     viewBox="0 0 24 24"
@@ -540,8 +572,8 @@ export default function HomePage() {
                     <line x1="12" y1="8" x2="12" y2="12" />
                     <line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
-                  <div className="flex-1">
-                    <p className="font-semibold text-rose-200">Scan Notice</p>
+                  <div className="flex-1 leading-relaxed">
+                    <p className="font-semibold text-rose-100">Notice</p>
                     <p className="mt-0.5">{error}</p>
                   </div>
                 </div>
@@ -551,162 +583,125 @@ export default function HomePage() {
 
           {/* RIGHT PANEL: Empty, Scanning, or Results */}
           <div ref={resultsRef} className="lg:col-span-7 space-y-6">
-            {/* 1. EMPTY STATE: 3-step preview of what VetoAI catches */}
+            {/* 1. EMPTY STATE: 3-step preview */}
             {!result && !loading && (
-              <div className="bg-[#111827]/90 rounded-2xl border border-slate-800 p-6 sm:p-8 backdrop-blur-md shadow-2xl">
+              <div className="bg-[#0B101D]/90 rounded-2xl border border-white/10 p-6 sm:p-8 backdrop-blur-md shadow-2xl">
                 <div className="flex items-center gap-2 mb-6">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">
-                    What VetoAI Detects
+                  <span className="w-2 h-2 rounded-full bg-[#D4FF2A]"></span>
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#D4FF2A]">
+                    X-Ray Breakdown
                   </span>
                 </div>
 
                 <div className="space-y-4">
-                  {/* Step 1 */}
-                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-start gap-4">
-                    <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
-                      <svg
-                        className="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                        <line x1="12" y1="9" x2="12" y2="13" />
-                        <line x1="12" y1="17" x2="12.01" y2="17" />
-                      </svg>
+                  <div className="p-4 sm:p-5 rounded-xl bg-white/[0.03] border border-white/10 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 font-bold text-sm">
+                      01
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white">
-                        1. Hidden Traps & Unreasonable Penalties
+                        Hidden Traps & Exit Penalties
                       </h4>
-                      <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-                        Flags 2-year training bonds, ₹1-2 Lakh exit liquidated damages, 50% stipend withholding, and 100% IP grabs on your personal weekend projects.
+                      <p className="mt-1 text-xs sm:text-[13px] text-[#CBD5E1] leading-relaxed">
+                        Flags 2-year bonds, ₹2L exit penalties, 50% stipend withholding, and claims on your weekend personal code.
                       </p>
                     </div>
                   </div>
 
-                  {/* Step 2 */}
-                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-start gap-4">
-                    <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                      <svg
-                        className="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                      </svg>
+                  <div className="p-4 sm:p-5 rounded-xl bg-white/[0.03] border border-white/10 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 font-bold text-sm">
+                      02
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white">
-                        2. Missing Legal Protections
+                        Missing Protective Safeguards
                       </h4>
-                      <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-                        Uncovers terms omitted from the agreement, like a fixed 14-day security deposit refund timeline, landlord maintenance duties, or mutual notice periods.
+                      <p className="mt-1 text-xs sm:text-[13px] text-[#CBD5E1] leading-relaxed">
+                        Finds what is conspicuously missing—like explicit 14-day deposit return deadlines and mutual termination notice.
                       </p>
                     </div>
                   </div>
 
-                  {/* Step 3 */}
-                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-start gap-4">
-                    <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
-                      <svg
-                        className="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                        <polyline points="22,6 12,13 2,6" />
-                      </svg>
+                  <div className="p-4 sm:p-5 rounded-xl bg-white/[0.03] border border-white/10 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-lg bg-[#60A5FA]/10 border border-[#60A5FA]/30 flex items-center justify-center text-[#60A5FA] shrink-0 font-bold text-sm">
+                      03
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-white">
-                        3. Ready-to-Send Negotiation Script
+                        Polite Counter-Proposal Email
                       </h4>
-                      <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-                        Generates a polite, assertive counter-negotiation email with 1-click clipboard copy, so you can push back professionally before you sign.
+                      <p className="mt-1 text-xs sm:text-[13px] text-[#CBD5E1] leading-relaxed">
+                        Drafts a diplomatic response you can copy and send directly to push back professionally before signing.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-                  <span>⚡ Resilient Gemini Model Pipeline</span>
-                  <span>🔒 Documents analyzed privately in-memory</span>
+                <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-[#CBD5E1] font-mono">
+                  <span>⚡ Multi-LLM Fallback Engine</span>
+                  <span>🔒 Processed securely in-memory</span>
                 </div>
               </div>
             )}
 
-            {/* 2. LOADING STATE: Animated scanning stepper */}
+            {/* 2. LOADING STATE: X-Ray Laser Beam & Stepper */}
             {loading && (
-              <div className="bg-[#111827]/90 rounded-2xl border border-cyan-500/30 p-6 sm:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">
-                {/* Laser scan line animation */}
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse" />
+              <div className="bg-[#0B101D]/90 rounded-2xl border border-[#60A5FA]/30 p-6 sm:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">
+                {/* Glowing Acid Lime + Cobalt Blue Laser Beam sweeping vertically */}
+                <div className="absolute left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-[#D4FF2A] to-[#60A5FA] blur-[1px] animate-xray-laser shadow-[0_0_15px_#D4FF2A]" />
 
                 <div className="flex items-center justify-between mb-6">
-                  <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-                    Running Contract X-Ray
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#D4FF2A] flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#D4FF2A] animate-ping"></span>
+                    Scanning Document
                   </span>
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-[#CBD5E1] font-mono">
                     Step {activeStep + 1} of 4
                   </span>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3.5">
                   {SCAN_STEPS.map((step, idx) => {
                     const isDone = idx < activeStep;
                     const isCurrent = idx === activeStep;
                     return (
                       <div
                         key={idx}
-                        className={`p-3.5 rounded-xl border transition-all flex items-center gap-3 ${
+                        className={`p-3.5 rounded-xl border transition-all duration-300 flex items-center gap-3 ${
                           isDone
-                            ? "bg-slate-900/40 border-emerald-500/30 text-emerald-300"
+                            ? "bg-white/[0.02] border-[#D4FF2A]/30 text-[#D4FF2A]"
                             : isCurrent
-                            ? "bg-cyan-950/40 border-cyan-500/50 text-cyan-200 shadow-lg shadow-cyan-950/30"
-                            : "bg-slate-900/20 border-slate-800 text-slate-500"
+                            ? "bg-[#60A5FA]/10 border-[#60A5FA]/60 text-white shadow-lg shadow-[#60A5FA]/10"
+                            : "bg-white/[0.01] border-white/5 text-slate-500"
                         }`}
                       >
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold font-mono ${
                             isDone
-                              ? "bg-emerald-500 text-slate-950"
+                              ? "bg-[#D4FF2A] text-[#05070C]"
                               : isCurrent
-                              ? "bg-cyan-400 text-slate-950 animate-pulse"
-                              : "bg-slate-800 text-slate-400"
+                              ? "bg-[#60A5FA] text-[#05070C] animate-pulse"
+                              : "bg-white/10 text-slate-400"
                           }`}
                         >
                           {isDone ? "✓" : idx + 1}
                         </div>
-                        <span className="text-xs sm:text-sm font-medium">
+                        <span className="text-sm font-medium">
                           {step}
                         </span>
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Pulsing skeleton preview */}
-                <div className="mt-6 pt-5 border-t border-slate-800 space-y-3 animate-pulse">
-                  <div className="w-1/3 h-4 bg-slate-800 rounded" />
-                  <div className="w-full h-8 bg-slate-800/60 rounded" />
-                  <div className="w-4/5 h-8 bg-slate-800/40 rounded" />
-                </div>
               </div>
             )}
 
-            {/* 3. RESULTS STATE: Risk Gauge + Flagged Clauses + Missing Protections + Email */}
+            {/* 3. RESULTS STATE: Verdict + Flags + Missing + Email */}
             {result && !loading && (
-              <div className="space-y-6 animate-fadeIn">
-                {/* Risk Score Summary Banner */}
-                <div className="bg-[#111827]/90 rounded-2xl border border-slate-800 p-6 sm:p-7 backdrop-blur-md shadow-2xl">
-                  <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
+              <div className="space-y-6 animate-fade-up">
+                {/* Verdict Card with Animated Circular SVG Risk Gauge */}
+                <div className="bg-[#0B101D]/90 rounded-2xl border border-white/10 p-6 sm:p-7 backdrop-blur-md shadow-2xl">
+                  <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-7">
                     {/* Circular SVG Gauge */}
                     <div className="relative w-32 h-32 shrink-0 flex items-center justify-center">
                       <svg
@@ -718,7 +713,7 @@ export default function HomePage() {
                           cy="60"
                           r={radius}
                           strokeWidth="10"
-                          className="stroke-slate-800 fill-none"
+                          className="stroke-white/10 fill-none"
                         />
                         <circle
                           cx="60"
@@ -728,41 +723,41 @@ export default function HomePage() {
                           strokeDasharray={circumference}
                           strokeDashoffset={strokeDashoffset}
                           strokeLinecap="round"
-                          className={`${riskMeta.stroke} fill-none transition-all duration-1000 ease-out`}
+                          className={`${riskMeta.stroke} fill-none transition-all duration-700 ease-out`}
                         />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                         <span
-                          className={`text-3xl font-extrabold tracking-tight ${riskMeta.text}`}
+                          className={`text-3xl font-black tracking-tight ${riskMeta.text}`}
                         >
-                          {result.riskScore}
+                          {displayScore}
                         </span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span className="text-[10px] font-mono font-bold text-[#CBD5E1] uppercase tracking-widest">
                           / 100 Risk
                         </span>
                       </div>
                     </div>
 
-                    {/* Summary text */}
+                    {/* Verdict & Plain-English Summary */}
                     <div className="flex-1 text-center sm:text-left">
                       <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${riskMeta.badgeBg}`}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider font-mono ${riskMeta.badgeBg}`}
                         >
                           <span
                             className={`w-2 h-2 rounded-full ${riskMeta.dot}`}
                           ></span>
-                          {result.overallRisk} Risk Level
+                          {riskMeta.verdict}
                         </span>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-[#CBD5E1] font-mono">
                           {result.flaggedClauses.length} Flagged • {result.missingProtections.length} Missing
                         </span>
                       </div>
 
-                      <h3 className="text-base sm:text-lg font-bold text-white">
-                        Executive Risk Analysis
+                      <h3 className="text-lg font-bold text-white mt-1">
+                        Executive Verdict
                       </h3>
-                      <p className="mt-1.5 text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      <p className="mt-1.5 text-[15px] text-[#CBD5E1] leading-relaxed font-normal">
                         {result.summary}
                       </p>
                     </div>
@@ -770,16 +765,16 @@ export default function HomePage() {
                 </div>
 
                 {/* Flagged Clauses Section */}
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
                       <span>⚠️</span>
-                      Flagged Trap Clauses ({result.flaggedClauses.length})
+                      Flagged Traps ({result.flaggedClauses.length})
                     </h3>
                   </div>
 
                   {result.flaggedClauses.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/10 text-xs text-[#CBD5E1]">
                       No high-risk clauses were flagged in this excerpt.
                     </div>
                   ) : (
@@ -791,39 +786,39 @@ export default function HomePage() {
                       return (
                         <div
                           key={idx}
-                          className={`p-4 sm:p-5 rounded-xl bg-[#111827]/90 border border-slate-800 ${cRisk.border} border-l-4 shadow-lg space-y-2.5`}
+                          className={`p-5 rounded-xl bg-[#0B101D]/90 border border-white/10 ${cRisk.border} border-l-4 shadow-lg space-y-3`}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <h4 className="text-sm font-bold text-white">
+                          <div className="flex items-start justify-between gap-3">
+                            <h4 className="text-sm sm:text-[15px] font-bold text-white">
                               {clause.title}
                             </h4>
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${cRisk.badgeBg}`}
+                              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${cRisk.badgeBg}`}
                             >
                               {clause.risk}
                             </span>
                           </div>
 
                           {clause.quote && (
-                            <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs italic text-slate-300">
-                              <span className="text-cyan-400 mr-1 font-serif text-sm">“</span>
+                            <div className="p-3 rounded-lg bg-[#05070C] border border-white/10 text-xs italic text-[#CBD5E1] font-mono">
+                              <span className="text-[#D4FF2A] mr-1 font-serif text-sm">“</span>
                               {clause.quote}
-                              <span className="text-cyan-400 ml-1 font-serif text-sm">”</span>
+                              <span className="text-[#D4FF2A] ml-1 font-serif text-sm">”</span>
                             </div>
                           )}
 
-                          <div className="text-xs text-slate-300 leading-relaxed">
-                            <span className="font-semibold text-slate-200 block text-[11px] uppercase tracking-wider text-slate-400 mb-0.5">
-                              Why it matters:
+                          <div className="text-[14px] text-[#CBD5E1] leading-relaxed">
+                            <span className="font-semibold text-white block text-[11px] uppercase tracking-wider text-slate-400 mb-0.5 font-mono">
+                              Why it hurts:
                             </span>
                             {clause.whyItMatters}
                           </div>
 
-                          <div className="pt-2 border-t border-slate-800/80 bg-cyan-950/20 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 p-3 sm:p-4 rounded-b-xl">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5 mb-1">
-                              <span>💬</span> How to push back:
+                          <div className="pt-2.5 border-t border-white/10 bg-white/[0.02] -mx-5 -mb-5 p-4 rounded-b-xl">
+                            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-1.5 mb-1">
+                              <span>💬</span> What to say:
                             </span>
-                            <p className="text-xs font-medium text-cyan-200">
+                            <p className="text-sm font-medium text-[#F8FAFC]">
                               &ldquo;{clause.negotiationLine}&rdquo;
                             </p>
                           </div>
@@ -834,40 +829,40 @@ export default function HomePage() {
                 </div>
 
                 {/* Missing Protections Section */}
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                       <span>🛡️</span>
-                      Missing Protections ({result.missingProtections.length})
+                      Missing Rights ({result.missingProtections.length})
                     </h3>
                   </div>
 
                   {result.missingProtections.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/10 text-xs text-[#CBD5E1]">
                       No critical standard protections were missing.
                     </div>
                   ) : (
                     result.missingProtections.map((item, idx) => (
                       <div
                         key={idx}
-                        className="p-4 sm:p-5 rounded-xl bg-[#111827]/90 border border-slate-800 border-l-4 border-l-amber-400 shadow-lg space-y-2"
+                        className="p-5 rounded-xl bg-[#0B101D]/90 border border-white/10 border-l-4 border-l-amber-400 shadow-lg space-y-2.5"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                            <span className="text-amber-400">●</span>
+                        <div className="flex items-start justify-between gap-3">
+                          <h4 className="text-sm sm:text-[15px] font-bold text-white flex items-center gap-2">
+                            <span className="text-amber-400 font-bold">●</span>
                             {item.title}
                           </h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 uppercase tracking-wider">
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 uppercase tracking-wider">
                             Missing
                           </span>
                         </div>
 
-                        <p className="text-xs text-slate-300 leading-relaxed">
+                        <p className="text-[14px] text-[#CBD5E1] leading-relaxed">
                           {item.whyItMatters}
                         </p>
 
-                        <div className="p-2.5 rounded-lg bg-amber-950/20 border border-amber-500/20 text-xs">
-                          <span className="font-bold text-amber-300 block text-[11px] uppercase tracking-wider mb-0.5">
+                        <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-500/20 text-xs sm:text-[13px]">
+                          <span className="font-bold text-amber-300 block text-[11px] font-mono uppercase tracking-wider mb-1">
                             Ask to add:
                           </span>
                           <span className="text-amber-100 font-medium">
@@ -879,15 +874,15 @@ export default function HomePage() {
                   )}
                 </div>
 
-                {/* Ready-to-Send Negotiation Email */}
-                <div className="bg-[#111827]/90 rounded-2xl border border-slate-800 p-5 sm:p-6 backdrop-blur-md shadow-2xl space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                {/* Sticky Negotiation Email Card */}
+                <div className="bg-[#0B101D]/90 rounded-2xl border border-white/10 p-6 backdrop-blur-md shadow-2xl space-y-4">
+                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
                     <div>
-                      <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                        <span className="text-cyan-400">✉️</span>
-                        Ready-to-Send Negotiation Email
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <span>✉️</span>
+                        Ready-to-Send Pushback Email
                       </h3>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <p className="text-xs text-[#CBD5E1] mt-0.5">
                         Diplomatic counter-proposal drafted by VetoAI
                       </p>
                     </div>
@@ -895,57 +890,39 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={handleCopyEmail}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-md ${
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 shadow-md ${
                         copied
-                          ? "bg-emerald-500 text-slate-950 shadow-emerald-500/20"
-                          : "bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-cyan-500/20"
+                          ? "bg-emerald-400 text-[#05070C]"
+                          : "bg-[#D4FF2A] hover:bg-[#c2ed18] text-[#05070C] hover:shadow-[0_0_20px_rgba(212,255,42,0.35)] active:scale-95"
                       }`}
                     >
                       {copied ? (
                         <>
-                          <svg
-                            className="w-3.5 h-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          Copied!
+                          <span>Copied! ✓</span>
                         </>
                       ) : (
                         <>
-                          <svg
-                            className="w-3.5 h-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                          Copy Email
+                          <span>Copy Email</span>
+                          <span>→</span>
                         </>
                       )}
                     </button>
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-1">
                       Subject Line:
                     </span>
-                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200">
+                    <div className="p-3 rounded-lg bg-[#05070C] border border-white/10 text-xs font-semibold text-white">
                       {result.negotiationEmail.subject}
                     </div>
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-1">
                       Email Body:
                     </span>
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs sm:text-sm text-slate-300 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto font-sans">
+                    <div className="p-4 rounded-xl bg-[#05070C] border border-white/10 text-sm text-[#CBD5E1] whitespace-pre-wrap leading-relaxed max-h-[360px] overflow-y-auto font-sans">
                       {result.negotiationEmail.body}
                     </div>
                   </div>
