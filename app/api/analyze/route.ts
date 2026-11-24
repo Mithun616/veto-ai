@@ -63,12 +63,17 @@ Provide your evaluation strictly formatted as JSON according to the following fi
 Always maintain an educational, empowering, and balanced tone.`;
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+
+  if (
+    (!geminiApiKey || geminiApiKey.trim() === "") &&
+    (!openRouterApiKey || openRouterApiKey.trim() === "")
+  ) {
     return NextResponse.json(
       {
         error:
-          "GEMINI_API_KEY is missing. Please configure your Gemini API key in your environment variables.",
+          "AI API key is missing. Please configure GEMINI_API_KEY or OPENROUTER_API_KEY in your environment variables.",
       },
       { status: 500 }
     );
@@ -164,272 +169,213 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey });
+  let responseText = "";
+  let lastStatus: number | null = null;
+  let lastErrorMessage = "";
 
-    // Expanded model fallback list in priority order
-    const modelsToTry = [
-      "gemini-3.8-flash",
-      "gemini-3.6-flash",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.0-flash",
-    ];
+  // 1. First, attempt with Gemini model cascade
+  if (geminiApiKey && geminiApiKey.trim() !== "") {
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
-    const generateConfig = {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          overallRisk: {
-            type: Type.STRING,
-            enum: ["Low", "Medium", "High"],
-          },
-          riskScore: {
-            type: Type.INTEGER,
-            description: "Risk score from 0 to 100",
-          },
-          summary: {
-            type: Type.STRING,
-          },
-          flaggedClauses: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                quote: { type: Type.STRING },
-                risk: { type: Type.STRING, enum: ["Low", "Medium", "High"] },
-                whyItMatters: { type: Type.STRING },
-                negotiationLine: { type: Type.STRING },
-              },
-              required: [
-                "title",
-                "quote",
-                "risk",
-                "whyItMatters",
-                "negotiationLine",
-              ],
-            },
-          },
-          missingProtections: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                whyItMatters: { type: Type.STRING },
-                askFor: { type: Type.STRING },
-              },
-              required: ["title", "whyItMatters", "askFor"],
-            },
-          },
-          negotiationEmail: {
-            type: Type.OBJECT,
-            properties: {
-              subject: { type: Type.STRING },
-              body: { type: Type.STRING },
-            },
-            required: ["subject", "body"],
-          },
-        },
-        required: [
-          "overallRisk",
-          "riskScore",
-          "summary",
-          "flaggedClauses",
-          "missingProtections",
-          "negotiationEmail",
-        ],
-      },
-    };
-
-    // Construct prompt contents for PDF vs text
-    let promptContents: unknown;
-    if (pdfInlineData) {
-      promptContents = [
-        {
-          inlineData: pdfInlineData,
-        },
-        {
-          text: BASE_SYSTEM_PROMPT,
-        },
+      const modelsToTry = [
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
       ];
-    } else {
-      promptContents = `${BASE_SYSTEM_PROMPT}\n\nDOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`;
-    }
 
-    let responseText = "";
-    let lastStatus: number | null = null;
-    let lastErrorMessage = "";
+      const generateConfig = {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            overallRisk: {
+              type: Type.STRING,
+              enum: ["Low", "Medium", "High"],
+            },
+            riskScore: {
+              type: Type.INTEGER,
+              description: "Risk score from 0 to 100",
+            },
+            summary: {
+              type: Type.STRING,
+            },
+            flaggedClauses: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  quote: { type: Type.STRING },
+                  risk: { type: Type.STRING, enum: ["Low", "Medium", "High"] },
+                  whyItMatters: { type: Type.STRING },
+                  negotiationLine: { type: Type.STRING },
+                },
+                required: [
+                  "title",
+                  "quote",
+                  "risk",
+                  "whyItMatters",
+                  "negotiationLine",
+                ],
+              },
+            },
+            missingProtections: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  whyItMatters: { type: Type.STRING },
+                  askFor: { type: Type.STRING },
+                },
+                required: ["title", "whyItMatters", "askFor"],
+              },
+            },
+            negotiationEmail: {
+              type: Type.OBJECT,
+              properties: {
+                subject: { type: Type.STRING },
+                body: { type: Type.STRING },
+              },
+              required: ["subject", "body"],
+            },
+          },
+          required: [
+            "overallRisk",
+            "riskScore",
+            "summary",
+            "flaggedClauses",
+            "missingProtections",
+            "negotiationEmail",
+          ],
+        },
+      };
 
-    for (let i = 0; i < modelsToTry.length; i++) {
-      const model = modelsToTry[i];
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: promptContents as string,
-          config: generateConfig,
-        });
-        if (response.text) {
-          responseText = response.text;
-          break;
-        }
-      } catch (err: unknown) {
-        const status =
-          (err as { status?: number })?.status ||
-          ((err as Error)?.message?.includes("503") ? 503 : null) ||
-          ((err as Error)?.message?.includes("429") ? 429 : null) ||
-          ((err as Error)?.message?.includes("404") ? 404 : null) ||
-          500;
+      // Construct prompt contents for PDF vs text
+      let promptContents: unknown;
+      if (pdfInlineData) {
+        promptContents = [
+          {
+            inlineData: pdfInlineData,
+          },
+          {
+            text: BASE_SYSTEM_PROMPT,
+          },
+        ];
+      } else {
+        promptContents = `${BASE_SYSTEM_PROMPT}\n\nDOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`;
+      }
 
-        lastStatus = status;
-        lastErrorMessage = err instanceof Error ? err.message : String(err);
+      for (let i = 0; i < modelsToTry.length; i++) {
+        const model = modelsToTry[i];
+        try {
+          const response = await ai.models.generateContent({
+            model,
+            contents: promptContents as string,
+            config: generateConfig,
+          });
+          if (response.text) {
+            responseText = response.text;
+            break;
+          }
+        } catch (err: unknown) {
+          const status =
+            (err as { status?: number })?.status ||
+            ((err as Error)?.message?.includes("503") ? 503 : null) ||
+            ((err as Error)?.message?.includes("429") ? 429 : null) ||
+            ((err as Error)?.message?.includes("404") ? 404 : null) ||
+            500;
 
-        console.warn(`[VetoAI] Model ${model} returned status ${status}.`);
+          lastStatus = status;
+          lastErrorMessage = err instanceof Error ? err.message : String(err);
 
-        // Skip 404 (unsupported/retired models) immediately without delay
-        if (status === 404) {
-          continue;
-        }
+          console.warn(`[VetoAI] Gemini model ${model} returned status ${status}.`);
 
-        // On 503 / 429, wait 600ms before trying the next model
-        if (status === 503 || status === 429) {
+          // Skip 404 (unsupported/retired models) immediately without delay
+          if (status === 404) {
+            continue;
+          }
+
+          // On 503 / 429, wait 600ms before trying next model
+          if (status === 503 || status === 429) {
+            if (i < modelsToTry.length - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 600));
+            }
+            continue;
+          }
+
           if (i < modelsToTry.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, 600));
           }
-          continue;
-        }
-
-        // For other transient errors, wait 600ms if more models remain
-        if (i < modelsToTry.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 600));
         }
       }
+    } catch (geminiErr) {
+      console.warn("[VetoAI] Gemini pipeline error:", geminiErr);
     }
+  }
 
-    if (!responseText) {
-      // If all models failed with 503 or 429, return a clean user-friendly 503 error
-      if (
-        lastStatus === 503 ||
-        lastStatus === 429 ||
-        lastErrorMessage.includes("503") ||
-        lastErrorMessage.includes("429") ||
-        lastErrorMessage.toLowerCase().includes("high demand")
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.",
-          },
-          { status: 503 }
-        );
-      }
-
-      // If unauthorized / invalid API key
-      if (
-        lastStatus === 401 ||
-        lastStatus === 403 ||
-        lastErrorMessage.toLowerCase().includes("api key")
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Invalid or unauthorized Gemini API key. Please verify your GEMINI_API_KEY in .env.",
-          },
-          { status: 401 }
-        );
-      }
-
-      return NextResponse.json(
-        {
-          error:
-            "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.",
-        },
-        { status: 503 }
-      );
-    }
-
-    let data: RawAnalysisData;
+  // 2. Fallback to OpenRouter if Gemini failed and OpenRouter API key is available
+  if (
+    !responseText &&
+    openRouterApiKey &&
+    openRouterApiKey.trim() !== "" &&
+    documentText.trim().length >= 50
+  ) {
     try {
-      data = JSON.parse(responseText) as RawAnalysisData;
-    } catch {
-      const cleanJson = responseText
-        .replace(/^```json\s*/i, "")
-        .replace(/```\s*$/i, "")
-        .trim();
-      data = JSON.parse(cleanJson) as RawAnalysisData;
+      console.log("[VetoAI] Gemini models unavailable, engaging OpenRouter fallback...");
+      const openRouterResponse = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openRouterApiKey.trim()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "openrouter/free",
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: "system",
+                content: `${BASE_SYSTEM_PROMPT}\n\nYou must respond ONLY with a valid JSON object matching the requested schema.`,
+              },
+              {
+                role: "user",
+                content: `DOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`,
+              },
+            ],
+          }),
+        }
+      );
+
+      if (openRouterResponse.ok) {
+        const orData = await openRouterResponse.json();
+        const content = orData.choices?.[0]?.message?.content;
+        if (content) {
+          responseText = content;
+          console.log("[VetoAI] Successfully generated analysis via OpenRouter fallback.");
+        }
+      } else {
+        const orStatus = openRouterResponse.status;
+        console.warn(`[VetoAI] OpenRouter API returned status ${orStatus}.`);
+        lastStatus = orStatus;
+      }
+    } catch (orErr) {
+      console.warn("[VetoAI] OpenRouter fallback call failed:", orErr);
     }
+  }
 
-    const overallRisk: "Low" | "Medium" | "High" =
-      data.overallRisk === "Low" ||
-      data.overallRisk === "Medium" ||
-      data.overallRisk === "High"
-        ? data.overallRisk
-        : "Medium";
-
-    const riskScore =
-      typeof data.riskScore === "number" && !isNaN(data.riskScore)
-        ? Math.min(100, Math.max(0, Math.round(data.riskScore)))
-        : 50;
-
-    const summary = typeof data.summary === "string" ? data.summary : "";
-
-    const rawClauses = Array.isArray(data.flaggedClauses)
-      ? data.flaggedClauses
-      : [];
-    const flaggedClauses = rawClauses.map((clause: RawFlaggedClause) => {
-      const riskVal: "Low" | "Medium" | "High" =
-        clause.risk === "Low" ||
-        clause.risk === "Medium" ||
-        clause.risk === "High"
-          ? clause.risk
-          : "Medium";
-      return {
-        title: String(clause.title || "Flagged Clause"),
-        quote: String(clause.quote || ""),
-        risk: riskVal,
-        whyItMatters: String(clause.whyItMatters || ""),
-        negotiationLine: String(clause.negotiationLine || ""),
-      };
-    });
-
-    const rawProtections = Array.isArray(data.missingProtections)
-      ? data.missingProtections
-      : [];
-    const missingProtections = rawProtections.map(
-      (item: RawMissingProtection) => ({
-        title: String(item.title || "Missing Protection"),
-        whyItMatters: String(item.whyItMatters || ""),
-        askFor: String(item.askFor || ""),
-      })
-    );
-
-    const negotiationEmail = {
-      subject: String(
-        data.negotiationEmail?.subject || "Discussion Regarding Agreement Terms"
-      ),
-      body: String(
-        data.negotiationEmail?.body ||
-          "Dear Hiring Manager / Landlord,\n\nThank you for sharing the agreement. I would like to discuss a few clauses..."
-      ),
-    };
-
-    return NextResponse.json({
-      overallRisk,
-      riskScore,
-      summary,
-      flaggedClauses,
-      missingProtections,
-      negotiationEmail,
-    });
-  } catch (error: unknown) {
-    console.error("VetoAI analysis error:", error);
-    const msg = error instanceof Error ? error.message : String(error);
+  // 3. If neither pipeline yielded a response, return a clean error
+  if (!responseText) {
     if (
-      msg.includes("503") ||
-      msg.includes("429") ||
-      msg.toLowerCase().includes("high demand")
+      lastStatus === 503 ||
+      lastStatus === 429 ||
+      lastErrorMessage.includes("503") ||
+      lastErrorMessage.includes("429") ||
+      lastErrorMessage.toLowerCase().includes("high demand")
     ) {
       return NextResponse.json(
         {
@@ -439,12 +385,113 @@ export async function POST(req: NextRequest) {
         { status: 503 }
       );
     }
+
+    if (
+      lastStatus === 401 ||
+      lastStatus === 403 ||
+      lastErrorMessage.toLowerCase().includes("api key")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid or unauthorized API key. Please verify your GEMINI_API_KEY or OPENROUTER_API_KEY in .env.",
+        },
+        { status: 401 }
+      );
+    }
+
     return NextResponse.json(
       {
         error:
-          "Unable to complete the analysis at this moment. Please wait a few seconds and try again.",
+          "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.",
       },
-      { status: 500 }
+      { status: 503 }
     );
   }
+
+  // 4. Parse and sanitize the response JSON
+  let data: RawAnalysisData;
+  try {
+    data = JSON.parse(responseText) as RawAnalysisData;
+  } catch {
+    const cleanJson = responseText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    try {
+      data = JSON.parse(cleanJson) as RawAnalysisData;
+    } catch (parseErr) {
+      console.error("[VetoAI] Failed to parse response JSON:", parseErr, responseText);
+      return NextResponse.json(
+        {
+          error:
+            "AI servers returned an invalid format. Please try running the scan again.",
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  const overallRisk: "Low" | "Medium" | "High" =
+    data.overallRisk === "Low" ||
+    data.overallRisk === "Medium" ||
+    data.overallRisk === "High"
+      ? data.overallRisk
+      : "Medium";
+
+  const riskScore =
+    typeof data.riskScore === "number" && !isNaN(data.riskScore)
+      ? Math.min(100, Math.max(0, Math.round(data.riskScore)))
+      : 50;
+
+  const summary = typeof data.summary === "string" ? data.summary : "";
+
+  const rawClauses = Array.isArray(data.flaggedClauses)
+    ? data.flaggedClauses
+    : [];
+  const flaggedClauses = rawClauses.map((clause: RawFlaggedClause) => {
+    const riskVal: "Low" | "Medium" | "High" =
+      clause.risk === "Low" ||
+      clause.risk === "Medium" ||
+      clause.risk === "High"
+        ? clause.risk
+        : "Medium";
+    return {
+      title: String(clause.title || "Flagged Clause"),
+      quote: String(clause.quote || ""),
+      risk: riskVal,
+      whyItMatters: String(clause.whyItMatters || ""),
+      negotiationLine: String(clause.negotiationLine || ""),
+    };
+  });
+
+  const rawProtections = Array.isArray(data.missingProtections)
+    ? data.missingProtections
+    : [];
+  const missingProtections = rawProtections.map(
+    (item: RawMissingProtection) => ({
+      title: String(item.title || "Missing Protection"),
+      whyItMatters: String(item.whyItMatters || ""),
+      askFor: String(item.askFor || ""),
+    })
+  );
+
+  const negotiationEmail = {
+    subject: String(
+      data.negotiationEmail?.subject || "Discussion Regarding Agreement Terms"
+    ),
+    body: String(
+      data.negotiationEmail?.body ||
+        "Dear Hiring Manager / Landlord,\n\nThank you for sharing the agreement. I would like to discuss a few clauses..."
+    ),
+  };
+
+  return NextResponse.json({
+    overallRisk,
+    riskScore,
+    summary,
+    flaggedClauses,
+    missingProtections,
+    negotiationEmail,
+  });
 }
