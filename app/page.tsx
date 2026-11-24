@@ -346,69 +346,67 @@ export default function HomePage() {
                 </span>
               </div>
 
-              {/* Drag & Drop Upload Zone */}
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleFileDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
-                  isDragging
-                    ? "border-[#D4FF2A] bg-[#D4FF2A]/5 shadow-[0_0_24px_rgba(212,255,42,0.15)] scale-[1.01]"
-                    : "border-white/15 hover:border-[#60A5FA]/60 bg-[#05070C]/60 hover:bg-[#05070C]/90"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                className="hidden"
+                onChange={handleFileChange}
+              />
 
-                <div className="flex flex-col items-center justify-center gap-2.5">
-                  <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#60A5FA]">
-                    <svg
-                      className="w-5 h-5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[#F8FAFC]">
-                      Drop contract file here
-                    </p>
-                    <p className="text-xs text-[#CBD5E1] mt-0.5">
-                      or <span className="text-[#60A5FA] underline">browse files</span> (.pdf, .docx, .txt)
-                    </p>
+              {/* Drag & Drop Upload Zone OR Compact File Chip */}
+              {!selectedFile ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all duration-200 ${
+                    isDragging
+                      ? "border-[#D4FF2A] bg-[#D4FF2A]/5 shadow-[0_0_24px_rgba(212,255,42,0.15)] scale-[1.01]"
+                      : "border-white/15 hover:border-[#60A5FA]/60 bg-[#05070C]/60 hover:bg-[#05070C]/90"
+                  }`}
+                >
+                  <div className="flex flex-col items-center justify-center gap-2.5">
+                    <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#60A5FA]">
+                      <svg
+                        className="w-5 h-5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[#F8FAFC]">
+                        Drop contract file here
+                      </p>
+                      <p className="text-xs text-[#CBD5E1] mt-0.5">
+                        or <span className="text-[#60A5FA] underline">browse files</span> (.pdf, .docx, .txt)
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Selected File Card */}
-              {selectedFile && (
-                <div className="mt-3 p-3 rounded-xl bg-white/5 border border-[#60A5FA]/40 flex items-center justify-between gap-3 animate-fade-up">
+              ) : (
+                /* Compact Single-Row File Chip */
+                <div className="px-4 py-3 rounded-xl bg-[#05070C]/90 border border-[#60A5FA]/40 flex items-center justify-between gap-3 animate-fade-up">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="px-2 py-0.5 rounded bg-[#60A5FA]/20 text-[#60A5FA] text-xs font-mono font-bold uppercase shrink-0">
                       {selectedFile.name.split(".").pop()}
                     </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-white truncate">
-                        {selectedFile.name}
-                      </p>
-                      <p className="text-[11px] text-[#CBD5E1]">
-                        {(selectedFile.size / 1024).toFixed(1)} KB
-                      </p>
-                    </div>
+                    <span className="text-xs font-medium text-[#F8FAFC] truncate">
+                      {selectedFile.name}
+                    </span>
+                    <span className="text-xs text-[#CBD5E1] font-mono shrink-0">
+                      • {(selectedFile.size / 1024).toFixed(1)} KB
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -416,11 +414,12 @@ export default function HomePage() {
                       e.stopPropagation();
                       removeFile();
                     }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                    className="px-2.5 py-1 text-xs font-mono text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors shrink-0 flex items-center gap-1"
                     title="Remove file"
                   >
+                    <span>Remove</span>
                     <svg
-                      className="w-4 h-4"
+                      className="w-3.5 h-3.5"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -647,51 +646,56 @@ export default function HomePage() {
             {/* 2. LOADING STATE: X-Ray Laser Beam & Stepper */}
             {loading && (
               <div className="bg-[#0B101D]/90 rounded-2xl border border-[#60A5FA]/30 p-6 sm:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">
-                {/* Glowing Acid Lime + Cobalt Blue Laser Beam sweeping vertically */}
-                <div className="absolute left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-[#D4FF2A] to-[#60A5FA] blur-[1px] animate-xray-laser shadow-[0_0_15px_#D4FF2A]" />
-
-                <div className="flex items-center justify-between mb-6">
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#D4FF2A] flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#D4FF2A] animate-ping"></span>
-                    Scanning Document
-                  </span>
-                  <span className="text-xs text-[#CBD5E1] font-mono">
-                    Step {activeStep + 1} of 4
-                  </span>
+                {/* Glowing Acid Lime + Cobalt Blue Laser Beam confined strictly in background (z-0) */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+                  <div className="absolute left-0 right-0 h-[2.5px] bg-gradient-to-r from-transparent via-[#D4FF2A] to-[#60A5FA] blur-[0.5px] animate-xray-laser shadow-[0_0_12px_#D4FF2A]" />
                 </div>
 
-                <div className="space-y-3.5">
-                  {SCAN_STEPS.map((step, idx) => {
-                    const isDone = idx < activeStep;
-                    const isCurrent = idx === activeStep;
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-3.5 rounded-xl border transition-all duration-300 flex items-center gap-3 ${
-                          isDone
-                            ? "bg-white/[0.02] border-[#D4FF2A]/30 text-[#D4FF2A]"
-                            : isCurrent
-                            ? "bg-[#60A5FA]/10 border-[#60A5FA]/60 text-white shadow-lg shadow-[#60A5FA]/10"
-                            : "bg-white/[0.01] border-white/5 text-slate-500"
-                        }`}
-                      >
+                {/* Content layer above the scanning beam (z-10) */}
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between pb-4 mb-6 border-b border-white/10">
+                    <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#D4FF2A] flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#D4FF2A] animate-ping"></span>
+                      Scanning Document
+                    </span>
+                    <span className="text-xs text-[#CBD5E1] font-mono">
+                      Step {activeStep + 1} of 4
+                    </span>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    {SCAN_STEPS.map((step, idx) => {
+                      const isDone = idx < activeStep;
+                      const isCurrent = idx === activeStep;
+                      return (
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold font-mono ${
+                          key={idx}
+                          className={`p-3.5 rounded-xl border backdrop-blur-sm transition-all duration-300 flex items-center gap-3 ${
                             isDone
-                              ? "bg-[#D4FF2A] text-[#05070C]"
+                              ? "bg-[#0B101D]/80 border-[#D4FF2A]/30 text-[#D4FF2A]"
                               : isCurrent
-                              ? "bg-[#60A5FA] text-[#05070C] animate-pulse"
-                              : "bg-white/10 text-slate-400"
+                              ? "bg-[#0B101D]/95 border-[#60A5FA]/60 text-white shadow-lg shadow-[#60A5FA]/10"
+                              : "bg-[#0B101D]/60 border-white/5 text-slate-500"
                           }`}
                         >
-                          {isDone ? "✓" : idx + 1}
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
+                              isDone
+                                ? "bg-[#D4FF2A] text-[#05070C]"
+                                : isCurrent
+                                ? "bg-[#60A5FA] text-[#05070C] animate-pulse"
+                                : "bg-white/10 text-slate-400"
+                            }`}
+                          >
+                            {isDone ? "✓" : idx + 1}
+                          </div>
+                          <span className="text-sm font-medium">
+                            {step}
+                          </span>
                         </div>
-                        <span className="text-sm font-medium">
-                          {step}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
