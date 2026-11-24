@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import mammoth from "mammoth";
+import { extractText } from "unpdf";
 
 export const maxDuration = 60;
 
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
 
   let documentText = "";
   let pdfInlineData: { mimeType: "application/pdf"; data: string } | null = null;
+  let pdfBuffer: Buffer | null = null;
 
   if (contentType.includes("multipart/form-data")) {
     try {
@@ -144,6 +146,7 @@ export async function POST(req: NextRequest) {
         const result = await mammoth.extractRawText({ buffer });
         documentText = result.value || "";
       } else if (fileName.endsWith(".pdf")) {
+        pdfBuffer = buffer;
         pdfInlineData = {
           mimeType: "application/pdf",
           data: buffer.toString("base64"),
@@ -339,13 +342,31 @@ export async function POST(req: NextRequest) {
   if (
     !responseText &&
     openRouterApiKey &&
-    openRouterApiKey.trim() !== "" &&
-    documentText.trim().length >= 50
+    openRouterApiKey.trim() !== ""
   ) {
-    const openRouterModels = [
-      "openrouter/free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-    ];
+    // If this was a PDF upload and text has not been extracted yet, extract it via unpdf
+    if (!documentText && pdfBuffer) {
+      try {
+        console.log(
+          "[VetoAI] Gemini failed for PDF. Extracting text via unpdf for OpenRouter fallback..."
+        );
+        const extracted = await extractText(new Uint8Array(pdfBuffer), {
+          mergePages: true,
+        });
+        documentText = (extracted.text || "").trim();
+        console.log(
+          `[VetoAI] Extracted ${documentText.length} characters from PDF using unpdf.`
+        );
+      } catch (unpdfErr) {
+        console.warn("[VetoAI] unpdf text extraction failed:", unpdfErr);
+      }
+    }
+
+    if (documentText.trim().length >= 50) {
+      const openRouterModels = [
+        "openrouter/free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+      ];
 
     for (const orModel of openRouterModels) {
       try {
@@ -394,6 +415,7 @@ export async function POST(req: NextRequest) {
       }
     }
   }
+}
 
   // 3. If neither pipeline yielded a response, return a clean error
   if (!responseText) {
