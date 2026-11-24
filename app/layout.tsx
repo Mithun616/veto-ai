@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VetoAI — Know the Traps Before You Sign",
+  title: "VetoAI — Contract X-Ray & Legal Trap Detection",
   description:
-    "Educational document-risk reviewer for students, freshers, tenants, and consumers. Detect training bonds, rental traps, and unfair clauses, with ready-to-send negotiation scripts.",
+    "Educational document-risk reviewer with native PDF/DOCX/TXT file scanning. Detect training bonds, rental traps, and unfair clauses with instant negotiation scripts.",
 };
 
 export default function RootLayout({
@@ -26,9 +26,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} dark antialiased`}
     >
-      <body className="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white antialiased">
+      <body className="min-h-screen bg-[#0B0F19] text-slate-100 selection:bg-cyan-400 selection:text-slate-950 antialiased">
         {children}
       </body>
     </html>

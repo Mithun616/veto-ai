@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
+import mammoth from "mammoth";
 
 interface RawFlaggedClause {
   title?: unknown;
@@ -29,49 +30,10 @@ interface RawAnalysisData {
   negotiationEmail?: RawNegotiationEmail;
 }
 
-export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim() === "") {
-    return NextResponse.json(
-      {
-        error:
-          "GEMINI_API_KEY is missing. Please configure your Gemini API key in your environment variables.",
-      },
-      { status: 500 }
-    );
-  }
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON in request body." },
-      { status: 400 }
-    );
-  }
-
-  const { documentText } = (body as { documentText?: unknown }) || {};
-  if (
-    typeof documentText !== "string" ||
-    documentText.trim().length < 50
-  ) {
-    return NextResponse.json(
-      {
-        error:
-          "documentText must be a string with at least 50 characters to perform analysis.",
-      },
-      { status: 400 }
-    );
-  }
-
-  const prompt = `You are VetoAI, an expert educational document-risk reviewer designed for students, freshers, interns, tenants, and everyday consumers.
-Analyze the following document text thoroughly for unfair traps, one-sided legal liabilities, aggressive penalties, and critical missing protections.
-
-DOCUMENT TO ANALYZE:
-"""
-${documentText}
-"""
+const BASE_SYSTEM_PROMPT = `You are VetoAI, an expert educational document-risk reviewer designed for students, freshers, interns, tenants, and everyday consumers.
+Analyze the provided contract/document thoroughly for unfair traps, one-sided legal liabilities, aggressive penalties, and critical missing protections.
 
 Focus on common traps and risks, including:
 1. Internship / Employment: Mandatory training bonds, heavy financial exit penalties (e.g. demanding ₹1,00,000+ or USD equivalent for training/exit), non-compete clauses prohibiting work in the same industry, unilateral stipend/salary withholding or deductions, excessive notice periods (e.g. 90 days for interns/probation), and vague termination terms.
@@ -100,11 +62,113 @@ Provide your evaluation strictly formatted as JSON according to the following fi
 
 Always maintain an educational, empowering, and balanced tone.`;
 
+export async function POST(req: NextRequest) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.trim() === "") {
+    return NextResponse.json(
+      {
+        error:
+          "GEMINI_API_KEY is missing. Please configure your Gemini API key in your environment variables.",
+      },
+      { status: 500 }
+    );
+  }
+
+  const contentType = req.headers.get("content-type") || "";
+
+  let documentText = "";
+  let pdfInlineData: { mimeType: "application/pdf"; data: string } | null = null;
+
+  if (contentType.includes("multipart/form-data")) {
+    try {
+      const formData = await req.formData();
+      const file = formData.get("file");
+
+      if (!file || typeof file === "string") {
+        return NextResponse.json(
+          { error: "No file provided in form data." },
+          { status: 400 }
+        );
+      }
+
+      const fileObj = file as File;
+      if (fileObj.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          {
+            error: `File size exceeds the 4 MB limit (file is ${(
+              fileObj.size /
+              (1024 * 1024)
+            ).toFixed(1)} MB).`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const fileName = fileObj.name.toLowerCase();
+      const arrayBuffer = await fileObj.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      if (fileName.endsWith(".txt")) {
+        documentText = buffer.toString("utf-8");
+      } else if (fileName.endsWith(".docx")) {
+        const result = await mammoth.extractRawText({ buffer });
+        documentText = result.value || "";
+      } else if (fileName.endsWith(".pdf")) {
+        pdfInlineData = {
+          mimeType: "application/pdf",
+          data: buffer.toString("base64"),
+        };
+      } else {
+        return NextResponse.json(
+          {
+            error:
+              "Unsupported file format. Please upload a .pdf, .docx, or .txt document.",
+          },
+          { status: 400 }
+        );
+      }
+    } catch (err: unknown) {
+      console.error("File parsing error:", err);
+      return NextResponse.json(
+        { error: "Failed to process uploaded file." },
+        { status: 400 }
+      );
+    }
+  } else {
+    // Process JSON request
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON in request body." },
+        { status: 400 }
+      );
+    }
+
+    const { documentText: rawText } =
+      (body as { documentText?: unknown }) || {};
+    if (typeof rawText === "string") {
+      documentText = rawText;
+    }
+  }
+
+  // If text-based, validate minimum length
+  if (!pdfInlineData && documentText.trim().length < 50) {
+    return NextResponse.json(
+      {
+        error:
+          "The document or text must contain at least 50 characters to perform analysis.",
+      },
+      { status: 400 }
+    );
+  }
+
   try {
     const ai = new GoogleGenAI({ apiKey });
 
     // Primary target model per specification is gemini-2.5-flash.
-    // If the API indicates that 2.5 is unavailable or experiencing temporary high demand, fallback gracefully.
+    // If unavailable or experiencing temporary high demand, fallback gracefully.
     const modelsToTry = [
       "gemini-2.5-flash",
       "gemini-3.6-flash",
@@ -179,6 +243,21 @@ Always maintain an educational, empowering, and balanced tone.`;
       },
     };
 
+    // Construct prompt contents for PDF vs text
+    let promptContents: unknown;
+    if (pdfInlineData) {
+      promptContents = [
+        {
+          inlineData: pdfInlineData,
+        },
+        {
+          text: BASE_SYSTEM_PROMPT,
+        },
+      ];
+    } else {
+      promptContents = `${BASE_SYSTEM_PROMPT}\n\nDOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`;
+    }
+
     let responseText = "";
     let lastError: unknown = null;
 
@@ -186,7 +265,7 @@ Always maintain an educational, empowering, and balanced tone.`;
       try {
         const response = await ai.models.generateContent({
           model,
-          contents: prompt,
+          contents: promptContents as string,
           config: generateConfig,
         });
         if (response.text) {
