@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import mammoth from "mammoth";
 
+export const maxDuration = 60;
+
 interface RawFlaggedClause {
   title?: unknown;
   quote?: unknown;
@@ -31,6 +33,7 @@ interface RawAnalysisData {
 }
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
+const GEMINI_TIMEOUT_MS = 5000; // 5 seconds per Gemini attempt
 
 const BASE_SYSTEM_PROMPT = `You are VetoAI, an expert educational document-risk reviewer designed for students, freshers, interns, tenants, and everyday consumers.
 Analyze the provided contract/document thoroughly for unfair traps, one-sided legal liabilities, aggressive penalties, and critical missing protections.
@@ -173,18 +176,13 @@ export async function POST(req: NextRequest) {
   let lastStatus: number | null = null;
   let lastErrorMessage = "";
 
-  // 1. First, attempt with Gemini model cascade
+  // 1. First, attempt with the 2 active Gemini flash models with a 5s timeout & 200ms backoff
   if (geminiApiKey && geminiApiKey.trim() !== "") {
     try {
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
-      const modelsToTry = [
-        "gemini-3.8-flash",
-        "gemini-3.6-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-      ];
+      // Only the 2 active, supported models (retired models removed)
+      const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash"];
 
       const generateConfig = {
         responseMimeType: "application/json",
@@ -272,43 +270,44 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < modelsToTry.length; i++) {
         const model = modelsToTry[i];
         try {
-          const response = await ai.models.generateContent({
+          // 5-second timeout on each Gemini attempt to avoid slow responses
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            const timer = setTimeout(() => {
+              reject(new Error(`Gemini ${model} timed out after ${GEMINI_TIMEOUT_MS}ms`));
+            }, GEMINI_TIMEOUT_MS);
+            // Allow process to exit cleanly if needed
+            if (typeof timer.unref === "function") timer.unref();
+          });
+
+          const generatePromise = ai.models.generateContent({
             model,
             contents: promptContents as string,
             config: generateConfig,
           });
+
+          const response = await Promise.race([generatePromise, timeoutPromise]);
+
           if (response.text) {
             responseText = response.text;
             break;
           }
         } catch (err: unknown) {
-          const status =
-            (err as { status?: number })?.status ||
-            ((err as Error)?.message?.includes("503") ? 503 : null) ||
-            ((err as Error)?.message?.includes("429") ? 429 : null) ||
-            ((err as Error)?.message?.includes("404") ? 404 : null) ||
-            500;
+          const isTimeout = (err as Error)?.message?.includes("timed out");
+          const status = isTimeout
+            ? 504
+            : (err as { status?: number })?.status ||
+              ((err as Error)?.message?.includes("503") ? 503 : null) ||
+              ((err as Error)?.message?.includes("429") ? 429 : null) ||
+              500;
 
           lastStatus = status;
           lastErrorMessage = err instanceof Error ? err.message : String(err);
 
-          console.warn(`[VetoAI] Gemini model ${model} returned status ${status}.`);
+          console.warn(`[VetoAI] Gemini model ${model} failed (${isTimeout ? "timeout 5s" : `status ${status}`}).`);
 
-          // Skip 404 (unsupported/retired models) immediately without delay
-          if (status === 404) {
-            continue;
-          }
-
-          // On 503 / 429, wait 600ms before trying next model
-          if (status === 503 || status === 429) {
-            if (i < modelsToTry.length - 1) {
-              await new Promise((resolve) => setTimeout(resolve, 600));
-            }
-            continue;
-          }
-
+          // Short 200ms delay before attempting next model
           if (i < modelsToTry.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
+            await new Promise((resolve) => setTimeout(resolve, 200));
           }
         }
       }
@@ -317,7 +316,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2. Fallback to OpenRouter if Gemini failed and OpenRouter API key is available
+  // 2. Immediate fallback to OpenRouter if Gemini failed and OpenRouter API key is available
   if (
     !responseText &&
     openRouterApiKey &&
@@ -325,7 +324,7 @@ export async function POST(req: NextRequest) {
     documentText.trim().length >= 50
   ) {
     try {
-      console.log("[VetoAI] Gemini models unavailable, engaging OpenRouter fallback...");
+      console.log("[VetoAI] Gemini unavailable or timed out. Immediately engaging OpenRouter fallback...");
       const openRouterResponse = await fetch(
         "https://openrouter.ai/api/v1/chat/completions",
         {
@@ -348,6 +347,7 @@ export async function POST(req: NextRequest) {
               },
             ],
           }),
+          signal: AbortSignal.timeout(35000),
         }
       );
 
@@ -372,9 +372,11 @@ export async function POST(req: NextRequest) {
   if (!responseText) {
     if (
       lastStatus === 503 ||
+      lastStatus === 504 ||
       lastStatus === 429 ||
       lastErrorMessage.includes("503") ||
       lastErrorMessage.includes("429") ||
+      lastErrorMessage.toLowerCase().includes("timed out") ||
       lastErrorMessage.toLowerCase().includes("high demand")
     ) {
       return NextResponse.json(
