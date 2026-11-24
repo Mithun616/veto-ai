@@ -37,7 +37,7 @@ We are pleased to offer you the position of Software Engineering Intern for a pe
 
 Key Terms & Conditions:
 1. Training Bond & Liquidated Damages: The intern agrees to undergo mandatory proprietary software training valued at INR 1,50,000. In the event the intern leaves the internship prior to completing the full 6 months plus a mandatory 18-month full-time commitment post-internship, the intern shall immediately reimburse the company INR 2,00,000 as liquidated damages and training expenses.
-2. Stipend & Mandatory Withholding: A monthly stipend of INR 12,000 will be paid. However, 50% of the monthly stipend (INR 6,00,0) will be retained by the company as a 'Security Deposit' and will only be disbursed upon successful completion of the full 24-month tenure.
+2. Stipend & Mandatory Withholding: A monthly stipend of INR 12,000 will be paid. However, 50% of the monthly stipend (INR 6,000) will be retained by the company as a 'Security Deposit' and will only be disbursed upon successful completion of the full 24-month tenure.
 3. Notice Period & Unilateral Termination: The intern must provide 90 days written notice prior to resignation, subject to explicit written approval from management. The company reserves the right to terminate the internship immediately without prior notice, explanation, or severance.
 4. Intellectual Property & Personal Side Projects: The intern hereby irrevocably assigns to the Company all rights, title, and interest in all intellectual property, software, designs, algorithms, and ideas developed during the internship term, including any personal side projects, open-source contributions, or applications created on weekends, off-duty hours, or using personal equipment.
 5. Non-Compete: For 24 months following separation, the intern shall not work for, consult, or start any business in software development or cloud computing anywhere in India.`;
@@ -251,14 +251,38 @@ export default function HomePage() {
   const strokeDashoffset =
     circumference - (circumference * displayScore) / 100;
 
+  // Live Risk Composition calculation for pure SVG Donut Chart
+  const highTrapsCount = result
+    ? result.flaggedClauses.filter((c) => c.risk === "High").length
+    : 0;
+  const medLowTrapsCount = result
+    ? result.flaggedClauses.filter((c) => c.risk !== "High").length
+    : 0;
+  const missingRightsCount = result ? result.missingProtections.length : 0;
+  const totalFindings = highTrapsCount + medLowTrapsCount + missingRightsCount;
+
+  const donutR = 32;
+  const donutC = 2 * Math.PI * donutR;
+
+  const highDash =
+    totalFindings > 0 ? (highTrapsCount / totalFindings) * donutC : 0;
+  const medLowDash =
+    totalFindings > 0 ? (medLowTrapsCount / totalFindings) * donutC : 0;
+  const missingDash =
+    totalFindings > 0 ? (missingRightsCount / totalFindings) * donutC : 0;
+
+  const highOffset = 0;
+  const medLowOffset = -highDash;
+  const missingOffset = -(highDash + medLowDash);
+
   return (
     <div className="min-h-screen bg-[#05070C] text-[#F8FAFC] flex flex-col font-sans selection:bg-[#D4FF2A] selection:text-[#05070C] relative">
       {/* Soft Cobalt Blue Radial Glow behind Hero */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[520px] bg-gradient-to-b from-[#2563EB]/15 via-[#2563EB]/5 to-transparent blur-3xl pointer-events-none -z-10" />
 
-      {/* Top Navbar */}
+      {/* Top Navbar: max-w-7xl px-6 sm:px-8 lg:px-12 */}
       <header className="sticky top-0 z-40 bg-[#05070C]/80 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* VetoAI Shield Mark */}
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#D4FF2A] via-[#60A5FA] to-[#2563EB] p-[1.5px] shadow-lg shadow-[#D4FF2A]/10">
@@ -303,8 +327,8 @@ export default function HomePage() {
         </p>
       </section>
 
-      {/* Main Single Centered Command Stage */}
-      <main className="w-full max-w-3xl mx-auto px-4">
+      {/* Main Single Centered Command Stage: max-w-4xl mx-auto */}
+      <main className="w-full max-w-4xl mx-auto px-4 sm:px-6">
         <div className="rounded-2xl border border-white/10 bg-[#0A0F1C]/90 p-5 sm:p-7 backdrop-blur-md shadow-2xl relative">
           {/* Top Bar: Segmented Tab Switch + Minimal Sample Links */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
@@ -557,16 +581,16 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Minimal, Ultra-Readable Results */}
+      {/* Minimal, Ultra-Readable Results: max-w-7xl px-6 sm:px-8 lg:px-12 */}
       {result && !loading && (
         <section
           ref={resultsRef}
-          className="w-full max-w-5xl mx-auto px-4 mt-14 mb-20 space-y-10 animate-fade-up"
+          className="w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 mt-12 mb-20 space-y-10 animate-fade-up"
         >
-          {/* Top Verdict Bar */}
-          <div className="p-7 sm:p-9 rounded-2xl bg-[#0A0F1C] border border-white/10 backdrop-blur-md shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-            <div className="flex items-center gap-6 sm:gap-8">
-              {/* Editorial SVG Risk Ring */}
+          {/* Top Executive Verdict Banner (3-Part Horizontal Bar on Desktop) */}
+          <div className="p-7 sm:p-8 rounded-2xl bg-[#0A0F1C] border border-white/10 backdrop-blur-md shadow-2xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Part 1: Circular Risk Score Gauge */}
+            <div className="lg:col-span-3 flex flex-col sm:flex-row lg:flex-col items-center justify-center gap-4 text-center sm:text-left lg:text-center">
               <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
                 <svg
                   className="w-full h-full transform -rotate-90"
@@ -602,33 +626,172 @@ export default function HomePage() {
                   </span>
                 </div>
               </div>
-
               <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-mono ${riskMeta.pill}`}
+                <div className="text-xs font-mono uppercase tracking-wider text-[#60A5FA]">
+                  Risk Score
+                </div>
+                <div className="text-xs text-slate-400 font-mono mt-0.5">
+                  {displayScore >= 70
+                    ? "Severe Trap Risk"
+                    : displayScore >= 35
+                    ? "Moderate Trap Risk"
+                    : "Low Trap Risk"}
+                </div>
+              </div>
+            </div>
+
+            {/* Part 2: Verdict Heading + 1-2 Sentence Summary */}
+            <div className="lg:col-span-5 space-y-2.5 text-center sm:text-left border-t lg:border-t-0 lg:border-l border-white/10 pt-6 lg:pt-0 lg:pl-8">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-mono ${riskMeta.pill}`}
+                >
+                  {riskMeta.verdict}
+                </span>
+                <span className="text-xs font-mono text-[#CBD5E1]">
+                  {result.flaggedClauses.length} Flagged ·{" "}
+                  {result.missingProtections.length} Missing
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                Executive Verdict
+              </h2>
+              <p className="text-[#F8FAFC] text-[15px] sm:text-base leading-relaxed font-normal">
+                {result.summary}
+              </p>
+            </div>
+
+            {/* Part 3: Risk Composition Donut Chart + Mini Fairness vs Risk Bar */}
+            <div className="lg:col-span-4 flex flex-col justify-center border-t lg:border-t-0 lg:border-l border-white/10 pt-6 lg:pt-0 lg:pl-8">
+              <div className="flex items-center gap-5 justify-center sm:justify-start">
+                {/* Pure SVG Donut Chart */}
+                <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
+                  <svg
+                    className="w-full h-full transform -rotate-90"
+                    viewBox="0 0 80 80"
                   >
-                    {riskMeta.verdict}
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r={donutR}
+                      strokeWidth="6"
+                      className="stroke-white/5"
+                      fill="transparent"
+                    />
+                    {highDash > 0 && (
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r={donutR}
+                        strokeWidth="6"
+                        strokeDasharray={`${highDash} ${donutC - highDash}`}
+                        strokeDashoffset={highOffset}
+                        stroke="#D4FF2A"
+                        fill="transparent"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    )}
+                    {medLowDash > 0 && (
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r={donutR}
+                        strokeWidth="6"
+                        strokeDasharray={`${medLowDash} ${donutC - medLowDash}`}
+                        strokeDashoffset={medLowOffset}
+                        stroke="#2563EB"
+                        fill="transparent"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    )}
+                    {missingDash > 0 && (
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r={donutR}
+                        strokeWidth="6"
+                        strokeDasharray={`${missingDash} ${
+                          donutC - missingDash
+                        }`}
+                        strokeDashoffset={missingOffset}
+                        stroke="#60A5FA"
+                        fill="transparent"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    )}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-sm font-black text-white">
+                      {totalFindings}
+                    </span>
+                    <span className="text-[8px] font-mono uppercase text-slate-400 tracking-wider">
+                      Items
+                    </span>
+                  </div>
+                </div>
+
+                {/* Clean Legend */}
+                <div className="space-y-1.5 text-xs font-mono min-w-0">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="flex items-center gap-1.5 text-[#CBD5E1]">
+                      <span className="w-2 h-2 rounded-full bg-[#D4FF2A]"></span>
+                      High Traps
+                    </span>
+                    <span className="font-bold text-white">
+                      {highTrapsCount}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="flex items-center gap-1.5 text-[#CBD5E1]">
+                      <span className="w-2 h-2 rounded-full bg-[#2563EB]"></span>
+                      Med/Low Traps
+                    </span>
+                    <span className="font-bold text-white">
+                      {medLowTrapsCount}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="flex items-center gap-1.5 text-[#CBD5E1]">
+                      <span className="w-2 h-2 rounded-full bg-[#60A5FA]"></span>
+                      Missing Rights
+                    </span>
+                    <span className="font-bold text-white">
+                      {missingRightsCount}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mini Horizontal Fairness vs. Risk Bar */}
+              <div className="mt-4 pt-3 border-t border-white/10 w-full">
+                <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
+                  <span className="text-[#60A5FA] flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
+                    Fairness {100 - displayScore}%
                   </span>
-                  <span className="text-xs font-mono text-[#CBD5E1]">
-                    {result.flaggedClauses.length} Flagged ·{" "}
-                    {result.missingProtections.length} Missing
+                  <span className="text-[#D4FF2A] flex items-center gap-1">
+                    Risk {displayScore}%
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#D4FF2A]" />
                   </span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white mt-2 tracking-tight">
-                  Executive Verdict
-                </h2>
-                <p className="text-[#F8FAFC] text-[15px] sm:text-base leading-relaxed mt-1 font-normal max-w-2xl">
-                  {result.summary}
-                </p>
+                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${100 - displayScore}%` }}
+                    className="bg-[#2563EB] h-full transition-all duration-700"
+                  />
+                  <div
+                    style={{ width: `${displayScore}%` }}
+                    className="bg-[#D4FF2A] h-full transition-all duration-700 shadow-[0_0_8px_#D4FF2A]"
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Clean 2-Column Hairline Results */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+          {/* Clean 2-Column Hairline Results: lg:grid-cols-[1.35fr_1fr] gap-10 */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-10 items-start">
             {/* Left Column: Flagged Traps + Missing Rights */}
-            <div className="lg:col-span-7 space-y-12">
+            <div className="space-y-12">
               {/* 01 / FLAGGED TRAPS */}
               <div>
                 <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-6">
@@ -721,7 +884,7 @@ export default function HomePage() {
             </div>
 
             {/* Right Column: Sticky Pushback Negotiation Email */}
-            <div className="lg:col-span-5">
+            <div>
               <div className="sticky top-24 rounded-2xl bg-[#0A0F1C] border border-white/10 p-6 backdrop-blur-md shadow-2xl space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-white/10">
                   <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
@@ -745,26 +908,42 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleCopyEmail}
-                  className="w-full bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm py-3 px-6 rounded-full transition-all duration-200 shadow-[0_0_20px_rgba(212,255,42,0.25)] flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
-                >
-                  {copied ? (
-                    <span>Copied! ✓</span>
-                  ) : (
-                    <span>Copy Email →</span>
-                  )}
-                </button>
+                {/* Email Action Buttons */}
+                <div className="space-y-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCopyEmail}
+                    className="w-full bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm py-3 px-6 rounded-full transition-all duration-200 shadow-[0_0_20px_rgba(212,255,42,0.25)] flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    {copied ? (
+                      <span>Copied! ✓</span>
+                    ) : (
+                      <span>Copy Email →</span>
+                    )}
+                  </button>
+
+                  <a
+                    href={`mailto:?subject=${encodeURIComponent(
+                      result.negotiationEmail.subject
+                    )}&body=${encodeURIComponent(result.negotiationEmail.body)}`}
+                    className="w-full border border-[#60A5FA]/40 hover:border-[#60A5FA] text-[#60A5FA] hover:text-white hover:bg-[#2563EB]/15 font-bold text-sm py-2.5 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 text-center"
+                  >
+                    <span>Open in Mail App →</span>
+                  </a>
+                </div>
               </div>
             </div>
           </div>
         </section>
       )}
 
-      {/* Minimal Footer */}
+      {/* Minimal Footer: max-w-7xl px-6 sm:px-8 lg:px-12 */}
       <footer className="mt-auto py-10 border-t border-white/10 text-center text-xs font-mono text-slate-500">
-        <p>VetoAI • Built with Next.js & Turbopack • Strictly for educational evaluation</p>
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+          <p>
+            VetoAI • Built with Next.js & Turbopack • Strictly for educational evaluation
+          </p>
+        </div>
       </footer>
     </div>
   );
