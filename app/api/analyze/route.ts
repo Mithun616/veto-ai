@@ -167,12 +167,13 @@ export async function POST(req: NextRequest) {
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    // Primary target model per specification is gemini-2.5-flash.
-    // If unavailable or experiencing temporary high demand, fallback gracefully.
+    // Expanded model fallback list in priority order
     const modelsToTry = [
-      "gemini-2.5-flash",
-      "gemini-3.6-flash",
       "gemini-3.8-flash",
+      "gemini-3.6-flash",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash",
     ];
 
     const generateConfig = {
@@ -259,9 +260,11 @@ export async function POST(req: NextRequest) {
     }
 
     let responseText = "";
-    let lastError: unknown = null;
+    let lastStatus: number | null = null;
+    let lastErrorMessage = "";
 
-    for (const model of modelsToTry) {
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const model = modelsToTry[i];
       try {
         const response = await ai.models.generateContent({
           model,
@@ -273,13 +276,78 @@ export async function POST(req: NextRequest) {
           break;
         }
       } catch (err: unknown) {
-        lastError = err;
-        console.warn(`Model ${model} attempt failed, trying fallback...`);
+        const status =
+          (err as { status?: number })?.status ||
+          ((err as Error)?.message?.includes("503") ? 503 : null) ||
+          ((err as Error)?.message?.includes("429") ? 429 : null) ||
+          ((err as Error)?.message?.includes("404") ? 404 : null) ||
+          500;
+
+        lastStatus = status;
+        lastErrorMessage = err instanceof Error ? err.message : String(err);
+
+        console.warn(`[VetoAI] Model ${model} returned status ${status}.`);
+
+        // Skip 404 (unsupported/retired models) immediately without delay
+        if (status === 404) {
+          continue;
+        }
+
+        // On 503 / 429, wait 600ms before trying the next model
+        if (status === 503 || status === 429) {
+          if (i < modelsToTry.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+          }
+          continue;
+        }
+
+        // For other transient errors, wait 600ms if more models remain
+        if (i < modelsToTry.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+        }
       }
     }
 
     if (!responseText) {
-      throw lastError || new Error("Failed to generate response from Gemini API.");
+      // If all models failed with 503 or 429, return a clean user-friendly 503 error
+      if (
+        lastStatus === 503 ||
+        lastStatus === 429 ||
+        lastErrorMessage.includes("503") ||
+        lastErrorMessage.includes("429") ||
+        lastErrorMessage.toLowerCase().includes("high demand")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.",
+          },
+          { status: 503 }
+        );
+      }
+
+      // If unauthorized / invalid API key
+      if (
+        lastStatus === 401 ||
+        lastStatus === 403 ||
+        lastErrorMessage.toLowerCase().includes("api key")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Invalid or unauthorized Gemini API key. Please verify your GEMINI_API_KEY in .env.",
+          },
+          { status: 401 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.",
+        },
+        { status: 503 }
+      );
     }
 
     let data: RawAnalysisData;
@@ -357,10 +425,26 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("VetoAI analysis error:", error);
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : "An error occurred while analyzing the document with Gemini. Please try again.";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    if (
+      msg.includes("503") ||
+      msg.includes("429") ||
+      msg.toLowerCase().includes("high demand")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "AI servers are experiencing high demand right now. Please wait a few seconds and click Run X-Ray Scan again.",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json(
+      {
+        error:
+          "Unable to complete the analysis at this moment. Please wait a few seconds and try again.",
+      },
+      { status: 500 }
+    );
   }
 }
