@@ -33,7 +33,7 @@ interface RawAnalysisData {
 }
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
-const GEMINI_TIMEOUT_MS = 5000; // 5 seconds per Gemini attempt
+const GEMINI_TIMEOUT_MS = 10000; // 10 seconds per Gemini attempt
 
 const BASE_SYSTEM_PROMPT = `You are VetoAI, an expert educational document-risk reviewer designed for students, freshers, interns, tenants, and everyday consumers.
 Analyze the provided contract/document thoroughly for unfair traps, one-sided legal liabilities, aggressive penalties, and critical missing protections.
@@ -63,7 +63,29 @@ Provide your evaluation strictly formatted as JSON according to the following fi
     * subject: A professional email subject line
     * body: Full polite email body referencing the clauses, explaining the requests, and proposing fair compromises.
 
-Always maintain an educational, empowering, and balanced tone.`;
+Always maintain an educational, empowering, and balanced tone. Reply ONLY with a valid JSON object.`;
+
+function extractJsonObject(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const codeBlockCleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    try {
+      return JSON.parse(codeBlockCleaned);
+    } catch {
+      const firstBrace = raw.indexOf("{");
+      const lastBrace = raw.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const sliced = raw.substring(firstBrace, lastBrace + 1);
+        return JSON.parse(sliced);
+      }
+      throw new Error("No valid JSON object found in model output.");
+    }
+  }
+}
 
 export async function POST(req: NextRequest) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -176,12 +198,11 @@ export async function POST(req: NextRequest) {
   let lastStatus: number | null = null;
   let lastErrorMessage = "";
 
-  // 1. First, attempt with the 2 active Gemini flash models with a 5s timeout & 200ms backoff
+  // 1. First, attempt with the 2 active Gemini flash models (10s timeout per model & 200ms backoff)
   if (geminiApiKey && geminiApiKey.trim() !== "") {
     try {
       const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
-      // Only the 2 active, supported models (retired models removed)
       const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash"];
 
       const generateConfig = {
@@ -270,12 +291,10 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < modelsToTry.length; i++) {
         const model = modelsToTry[i];
         try {
-          // 5-second timeout on each Gemini attempt to avoid slow responses
           const timeoutPromise = new Promise<never>((_, reject) => {
             const timer = setTimeout(() => {
               reject(new Error(`Gemini ${model} timed out after ${GEMINI_TIMEOUT_MS}ms`));
             }, GEMINI_TIMEOUT_MS);
-            // Allow process to exit cleanly if needed
             if (typeof timer.unref === "function") timer.unref();
           });
 
@@ -303,7 +322,7 @@ export async function POST(req: NextRequest) {
           lastStatus = status;
           lastErrorMessage = err instanceof Error ? err.message : String(err);
 
-          console.warn(`[VetoAI] Gemini model ${model} failed (${isTimeout ? "timeout 5s" : `status ${status}`}).`);
+          console.warn(`[VetoAI] Gemini model ${model} failed (${isTimeout ? "timeout 10s" : `status ${status}`}).`);
 
           // Short 200ms delay before attempting next model
           if (i < modelsToTry.length - 1) {
@@ -316,55 +335,63 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2. Immediate fallback to OpenRouter if Gemini failed and OpenRouter API key is available
+  // 2. Fallback to OpenRouter (tries openrouter/free, then meta-llama/llama-3.3-70b-instruct:free)
   if (
     !responseText &&
     openRouterApiKey &&
     openRouterApiKey.trim() !== "" &&
     documentText.trim().length >= 50
   ) {
-    try {
-      console.log("[VetoAI] Gemini unavailable or timed out. Immediately engaging OpenRouter fallback...");
-      const openRouterResponse = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${openRouterApiKey.trim()}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "openrouter/free",
-            response_format: { type: "json_object" },
-            messages: [
-              {
-                role: "system",
-                content: `${BASE_SYSTEM_PROMPT}\n\nYou must respond ONLY with a valid JSON object matching the requested schema.`,
-              },
-              {
-                role: "user",
-                content: `DOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`,
-              },
-            ],
-          }),
-          signal: AbortSignal.timeout(35000),
-        }
-      );
+    const openRouterModels = [
+      "openrouter/free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+    ];
 
-      if (openRouterResponse.ok) {
-        const orData = await openRouterResponse.json();
-        const content = orData.choices?.[0]?.message?.content;
-        if (content) {
-          responseText = content;
-          console.log("[VetoAI] Successfully generated analysis via OpenRouter fallback.");
+    for (const orModel of openRouterModels) {
+      try {
+        console.log(`[VetoAI] Attempting OpenRouter fallback with model: ${orModel}...`);
+        const openRouterResponse = await fetch(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${openRouterApiKey.trim()}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: orModel,
+              messages: [
+                {
+                  role: "system",
+                  content: `${BASE_SYSTEM_PROMPT}\n\nIMPORTANT: Respond ONLY with a valid JSON object matching the requested schema. Do not enclose in markdown and do not include extra commentary.`,
+                },
+                {
+                  role: "user",
+                  content: `DOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`,
+                },
+              ],
+            }),
+            signal: AbortSignal.timeout(30000),
+          }
+        );
+
+        if (openRouterResponse.ok) {
+          const orData = await openRouterResponse.json();
+          const content = orData.choices?.[0]?.message?.content;
+          if (content) {
+            responseText = content;
+            console.log(`[VetoAI] Successfully received analysis from OpenRouter model: ${orModel}`);
+            break;
+          }
+        } else {
+          const orStatus = openRouterResponse.status;
+          const orErrorText = await openRouterResponse.text().catch(() => "");
+          console.warn(`[VetoAI] OpenRouter model ${orModel} returned status ${orStatus}: ${orErrorText.substring(0, 80)}`);
+          lastStatus = orStatus;
         }
-      } else {
-        const orStatus = openRouterResponse.status;
-        console.warn(`[VetoAI] OpenRouter API returned status ${orStatus}.`);
-        lastStatus = orStatus;
+      } catch (orErr) {
+        console.warn(`[VetoAI] OpenRouter model ${orModel} failed:`, orErr);
       }
-    } catch (orErr) {
-      console.warn("[VetoAI] OpenRouter fallback call failed:", orErr);
     }
   }
 
@@ -414,24 +441,16 @@ export async function POST(req: NextRequest) {
   // 4. Parse and sanitize the response JSON
   let data: RawAnalysisData;
   try {
-    data = JSON.parse(responseText) as RawAnalysisData;
-  } catch {
-    const cleanJson = responseText
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-    try {
-      data = JSON.parse(cleanJson) as RawAnalysisData;
-    } catch (parseErr) {
-      console.error("[VetoAI] Failed to parse response JSON:", parseErr, responseText);
-      return NextResponse.json(
-        {
-          error:
-            "AI servers returned an invalid format. Please try running the scan again.",
-        },
-        { status: 500 }
-      );
-    }
+    data = extractJsonObject(responseText) as RawAnalysisData;
+  } catch (parseErr) {
+    console.error("[VetoAI] Failed to parse response JSON:", parseErr, responseText);
+    return NextResponse.json(
+      {
+        error:
+          "AI servers returned an invalid format. Please try running the scan again.",
+      },
+      { status: 500 }
+    );
   }
 
   const overallRisk: "Low" | "Medium" | "High" =
