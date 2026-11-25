@@ -14,6 +14,15 @@ export type RiskLevel = "Low" | "Medium" | "High";
 export type NormalizedSeverity = "High" | "Medium" | "Low" | "Unrated";
 
 /**
+ * Detected contract category for context-aware risk analysis and tailored protections.
+ */
+export type DocumentCategory =
+  | "rental"
+  | "internship"
+  | "saas_fintech"
+  | "general";
+
+/**
  * Normalizes any raw risk string into standard severity tiers.
  * Missing, undefined, or unrecognized values return "Unrated" without silently coercing to Low.
  */
@@ -327,17 +336,98 @@ export function findMatchingSnippet(text: string, patterns: RegExp[]): string {
 }
 
 /**
+ * Detects contract category based on distinctive keywords and legal phrasing.
+ * Categories: rental, internship, saas_fintech, or general.
+ *
+ * @param text - Contract text to classify.
+ * @returns Detected DocumentCategory.
+ */
+export function detectDocumentCategory(text: string): DocumentCategory {
+  const lower = text.toLowerCase();
+
+  const rentalPatterns = [
+    /\brents?\b/i,
+    /\brentals?\b/i,
+    /\blandlords?\b/i,
+    /\btenants?\b/i,
+    /\bleases?\b/i,
+    /\bsecurity deposit\b/i,
+    /\bpremises\b/i,
+    /\blessor\b/i,
+    /\blessee\b/i,
+  ];
+
+  const internshipPatterns = [
+    /\binterns?\b/i,
+    /\binternships?\b/i,
+    /\bstipends?\b/i,
+    /\btraining bond\b/i,
+    /\boffer letter\b/i,
+    /\bprobation\b/i,
+    /\bnon-compete\b/i,
+    /\bemployment\b/i,
+  ];
+
+  const saasFintechPatterns = [
+    /\bsubscriptions?\b/i,
+    /\bauto-renew(?:al)?\b/i,
+    /\bfree trial\b/i,
+    /\bterms of service\b/i,
+    /\bterms of use\b/i,
+    /\buser data\b/i,
+    /\bai training\b/i,
+    /\bliability\b/i,
+    /\bapr\b/i,
+    /\bemi\b/i,
+    /\bbanks?\b/i,
+    /\bfees?\b/i,
+    /\bplatform\b/i,
+    /\bsoftware as a service\b/i,
+    /\bsaas\b/i,
+    /\bfintech\b/i,
+  ];
+
+  let rentalScore = 0;
+  for (const pat of rentalPatterns) {
+    if (pat.test(lower)) rentalScore++;
+  }
+
+  let internshipScore = 0;
+  for (const pat of internshipPatterns) {
+    if (pat.test(lower)) internshipScore++;
+  }
+
+  let saasScore = 0;
+  for (const pat of saasFintechPatterns) {
+    if (pat.test(lower)) saasScore++;
+  }
+
+  if (rentalScore > 0 && rentalScore >= internshipScore && rentalScore >= saasScore) {
+    return "rental";
+  }
+  if (internshipScore > 0 && internshipScore >= saasScore) {
+    return "internship";
+  }
+  if (saasScore > 0) {
+    return "saas_fintech";
+  }
+  return "general";
+}
+
+/**
  * Deterministic local analyzer that inspects contract text using vetted regex patterns.
  * Acts as Provider #4 fallback to guarantee 100% demo resilience with zero external APIs.
+ * Aware of document category (rental, internship, saas_fintech) for tailored traps and safeguards.
  *
  * @param text - Sanitized contract text to audit.
  * @returns Fully structured AnalysisResult.
  */
 export function runLocalClauseAnalysis(text: string): AnalysisResult {
+  const category = detectDocumentCategory(text);
   const flaggedClauses: FlaggedClause[] = [];
   const missingProtections: MissingProtection[] = [];
 
-  // Trap 1: Training bond & exit penalties
+  // Trap 1: Training bond & exit penalties (internship / employment)
   const bondPatterns = [
     /training bond/i,
     /liquidated damages/i,
@@ -363,7 +453,7 @@ export function runLocalClauseAnalysis(text: string): AnalysisResult {
     });
   }
 
-  // Trap 2: Pay withholding & deposit cuts
+  // Trap 2: Pay withholding & deposit cuts (internship / rental)
   const withholdPatterns = [
     /withhold/i,
     /retained/i,
@@ -459,7 +549,7 @@ export function runLocalClauseAnalysis(text: string): AnalysisResult {
     });
   }
 
-  // Trap 6: Landlord unrestricted entry & repair disclaimers
+  // Trap 6: Landlord unrestricted entry & repair disclaimers (rental)
   const entryPatterns = [
     /enter and inspect/i,
     /without prior notice/i,
@@ -482,7 +572,7 @@ export function runLocalClauseAnalysis(text: string): AnalysisResult {
     });
   }
 
-  // Trap 7: Delayed deposit refund & forfeiture
+  // Trap 7: Delayed deposit refund & forfeiture (rental)
   const refundPatterns = [
     /90 to 120 days/i,
     /sole convenience/i,
@@ -504,47 +594,202 @@ export function runLocalClauseAnalysis(text: string): AnalysisResult {
     });
   }
 
-  // Missing protections
-  if (!/14 days|14 business days/i.test(text)) {
-    missingProtections.push({
-      title: "14-Day Deposit Return Timeline",
+  // Trap 8: Auto-Renewal / Postal Cancellation / Non-Refundable Charges (saas_fintech)
+  const autoRenewPatterns = [
+    /auto-renew(?:al)?/i,
+    /automatic renewal/i,
+    /cancel.*(?:written notice|registered post|postal mail|postal|certified mail)/i,
+    /non-refundable/i,
+    /no refunds/i,
+    /all (?:fees|charges|payments) are non-refundable/i,
+  ];
+  if (autoRenewPatterns.some((p) => p.test(text))) {
+    const quote =
+      findMatchingSnippet(text, autoRenewPatterns) ||
+      "Automatic subscription renewal and non-refundable fees policy.";
+    flaggedClauses.push({
+      title: "Auto-Renewal & Burdensome Cancellation",
+      quote,
+      risk: "High",
       whyItMatters:
-        "Without an explicit deadline, deposit refunds can be delayed indefinitely.",
-      askFor:
-        "Please specify that the security deposit will be refunded within 14 days of vacancy.",
+        "Automatic renewals paired with non-refundable charges or postal cancellation requirements trap you into paying for unwanted recurring billing cycles.",
+      negotiationLine:
+        "Please provide simple digital one-click cancellation and pro-rata refunds for unused subscription periods.",
     });
   }
 
-  if (
-    !/mutual notice/i.test(text) &&
-    noticePatterns.some((p) => p.test(text))
-  ) {
-    missingProtections.push({
-      title: "Mutual Notice Safeguard",
+  // Trap 9: Broad IP / Selling or Sharing User Data / AI Training License (saas_fintech)
+  const dataAiPatterns = [
+    /sell(?:ing)?.*(?:user data|personal data|consumer data|information)/i,
+    /share.*(?:third parties|partners|advertisers).*without.*consent/i,
+    /ai training/i,
+    /train.*(?:ai|model|models|algorithm|machine learning)/i,
+    /perpetual.*irrevocable.*(?:license|right).*user content/i,
+    /worldwide.*royalty-free.*license.*(?:content|data)/i,
+    /monetize.*(?:data|information)/i,
+  ];
+  if (dataAiPatterns.some((p) => p.test(text))) {
+    const quote =
+      findMatchingSnippet(text, dataAiPatterns) ||
+      "Perpetual data rights, third-party data sharing, or AI model training license.";
+    flaggedClauses.push({
+      title: "Broad Data Exploitation & AI Training",
+      quote,
+      risk: "High",
       whyItMatters:
-        "You need equal protection against unexpected contract termination.",
-      askFor:
-        "Please ensure the notice period applies mutually to both parties.",
+        "Granting broad rights to monetize user data, share information with third parties, or conduct AI model training compromises your proprietary data and privacy.",
+      negotiationLine:
+        "Please clarify that user data remains strictly confidential and cannot be shared with third parties or used for AI model training.",
     });
   }
 
-  if (entryPatterns.some((p) => p.test(text))) {
+  // Trap 10: Tiny Liability Caps + Immediate Data Deletion (saas_fintech)
+  const liabilityPatterns = [
+    /liability.*(?:shall not exceed|limited to|capped at).*(?:inr|rs\.?|\$|usd|eur)?\s*(?:250|500|100|50|one month|amount paid)/i,
+    /total aggregate liability.*(?:250|500|one month|amount paid)/i,
+    /immediate(?:ly)?.*delet(?:e|ion).*data/i,
+    /delete.*without.*(?:export|backup)/i,
+    /no obligation to (?:retain|return) data/i,
+    /data deletion upon termination/i,
+  ];
+  if (liabilityPatterns.some((p) => p.test(text))) {
+    const quote =
+      findMatchingSnippet(text, liabilityPatterns) ||
+      "Liability capped at a token amount with immediate data deletion on termination.";
+    flaggedClauses.push({
+      title: "Tiny Liability Cap & Immediate Data Deletion",
+      quote,
+      risk: "High",
+      whyItMatters:
+        "Limiting liability to a negligible token amount (e.g. ₹250–500) while immediately purging your data upon termination leaves you with zero recourse and lost assets if the service fails.",
+      negotiationLine:
+        "Please increase the liability cap to reasonable direct damages and grant a 30-day window to export data upon termination.",
+    });
+  }
+
+  // Trap 11: Hidden Fees / Retroactive Interest Spikes / Auto-Debit (saas_fintech)
+  const feeDebitPatterns = [
+    /retroactive(?:ly)?/i,
+    /interest rate.*(?:increase|revised|spike|adjusted).*without/i,
+    /auto-debit.*without.*notice/i,
+    /hidden fee/i,
+    /unilateral.*fee/i,
+    /revise.*(?:fee|rate).*at.*sole discretion/i,
+    /convenience fee.*without prior/i,
+    /processing fee.*without prior/i,
+    /charge.*without.*prior authorization/i,
+  ];
+  if (feeDebitPatterns.some((p) => p.test(text))) {
+    const quote =
+      findMatchingSnippet(text, feeDebitPatterns) ||
+      "Unilateral fee revisions, retroactive interest changes, or auto-debiting without notice.";
+    flaggedClauses.push({
+      title: "Hidden Fees & Unilateral Auto-Debit",
+      quote,
+      risk: "High",
+      whyItMatters:
+        "Allowing unilateral fee changes, retroactive interest hikes, or unexpected auto-debits exposes you to arbitrary financial charges without consent.",
+      negotiationLine:
+        "Please require 30 days prior written notice before any fee or rate adjustments, and eliminate non-negotiable auto-debits.",
+    });
+  }
+
+  // Category-specific Missing Protections
+  if (category === "rental") {
+    if (!/14 days|14 business days/i.test(text)) {
+      missingProtections.push({
+        title: "14-Day Deposit Return Timeline",
+        whyItMatters:
+          "Without an explicit deadline, security deposit refunds can be delayed indefinitely.",
+        askFor:
+          "Please specify that the security deposit will be refunded in full within 14 days of vacancy.",
+      });
+    }
+
     missingProtections.push({
       title: "Landlord Maintenance Obligations",
       whyItMatters:
-        "Tenants should not be on the hook for major electrical or plumbing failures.",
+        "Tenants should not be on the hook for major electrical, plumbing, or structural repairs.",
       askFor:
-        "Please add standard terms obligating the landlord to handle structural repairs.",
+        "Please add standard terms obligating the landlord to handle major maintenance and structural repairs.",
     });
-  }
 
-  if (ipPatterns.some((p) => p.test(text))) {
+    if (noticePatterns.some((p) => p.test(text)) && !/mutual notice/i.test(text)) {
+      missingProtections.push({
+        title: "Mutual Notice Safeguard",
+        whyItMatters:
+          "You need equal protection against unexpected lease termination or sudden eviction.",
+        askFor:
+          "Please ensure the notice period for lease termination applies mutually to landlord and tenant.",
+      });
+    }
+  } else if (category === "internship") {
+    if (ipPatterns.some((p) => p.test(text)) || !/carveout|personal project/i.test(text)) {
+      missingProtections.push({
+        title: "Personal Side Project Carveout",
+        whyItMatters:
+          "You could inadvertently lose rights to your own portfolio and weekend open-source code.",
+        askFor:
+          "Please explicitly carve out personal open-source projects created outside working hours.",
+      });
+    }
+
+    if (noticePatterns.some((p) => p.test(text)) && !/mutual notice/i.test(text)) {
+      missingProtections.push({
+        title: "Mutual Notice Safeguard",
+        whyItMatters:
+          "You need equal protection against unexpected contract termination without cause.",
+        askFor:
+          "Please ensure the notice period applies mutually to both parties.",
+      });
+    }
+
     missingProtections.push({
-      title: "Personal Side Project Carveout",
+      title: "Guaranteed Timely Stipend Release",
       whyItMatters:
-        "You could inadvertently lose rights to your own portfolio and weekend code.",
+        "Interns rely on predictable monthly compensation to cover living expenses without arbitrary holdbacks.",
       askFor:
-        "Please explicitly carve out personal open-source projects created outside working hours.",
+        "Please guarantee 100% full monthly stipend disbursement on time without security holdbacks.",
+    });
+  } else if (category === "saas_fintech") {
+    missingProtections.push({
+      title: "Digital Cancellation & Refunds",
+      whyItMatters:
+        "Without clear self-service cancellation, you can be locked into unwanted recurring subscription charges.",
+      askFor:
+        "Please provide one-click digital cancellation and pro-rata refunds for unused billing periods.",
+    });
+
+    missingProtections.push({
+      title: "30-Day Data Export Window",
+      whyItMatters:
+        "If a provider terminates service, you risk permanently losing your customer data and uploaded assets.",
+      askFor:
+        "Please guarantee a 30-day post-termination window to export all user data in standard formats.",
+    });
+
+    missingProtections.push({
+      title: "Fair Liability Cap",
+      whyItMatters:
+        "A token cap (like ₹250 or one month's fee) leaves you unprotected against major service outages or data breaches.",
+      askFor:
+        "Please adjust the liability limitation to a fair amount tied to direct damages (e.g. 12 months of fees).",
+    });
+  } else {
+    missingProtections.push({
+      title: "Standard 30-Day Notice Clause",
+      whyItMatters:
+        "A clear notice period gives both sides time to transition smoothly.",
+      askFor:
+        "Please add a standard 30-day mutual notice requirement before termination.",
+    });
+
+    missingProtections.push({
+      title: "Mutual Fairness & Dispute Resolution",
+      whyItMatters:
+        "Clear terms prevent one-sided obligations and unannounced contract changes.",
+      askFor:
+        "Please include balanced mutual terms for termination and dispute resolution.",
     });
   }
 
@@ -557,16 +802,6 @@ export function runLocalClauseAnalysis(text: string): AnalysisResult {
       whyItMatters: "No severe predatory terms were detected in this excerpt.",
       negotiationLine:
         "Always ensure key compensation, termination rules, and deliverables are stated explicitly in writing.",
-    });
-  }
-
-  if (missingProtections.length === 0) {
-    missingProtections.push({
-      title: "Standard 30-Day Notice Clause",
-      whyItMatters:
-        "A clear notice period gives both sides time to transition smoothly.",
-      askFor:
-        "Please add a standard 30-day mutual notice requirement before termination.",
     });
   }
 
@@ -595,13 +830,42 @@ export function runLocalClauseAnalysis(text: string): AnalysisResult {
       ? "This agreement has a few one-sided clauses that should be clarified and balanced before signing."
       : "This agreement appears largely standard, but ensure key notice and payment terms are documented.";
 
+  // Dynamic negotiation email unique to document category and findings
+  let emailSubject = "Discussion Regarding Proposed Agreement Terms";
+  let emailOpening =
+    "Thank you for sharing the agreement for review. Before signing, I have reviewed the terms and would like to propose a few adjustments to ensure the agreement is balanced and standard for both parties:";
+
+  if (category === "internship") {
+    emailSubject = "Proposed Revisions to Internship Offer Letter";
+    emailOpening =
+      "Thank you for extending this internship offer. I am genuinely excited about the role and contributing to the team. Before signing, I reviewed the agreement terms and would appreciate discussing a few adjustments to ensure standard, balanced terms:";
+  } else if (category === "rental") {
+    emailSubject = "Request for Balanced Residential Lease Terms";
+    emailOpening =
+      "Thank you for sharing the tenancy agreement. I look forward to the tenancy. Before finalizing, I reviewed the agreement and would like to propose a few standard adjustments to ensure fair and balanced terms for both parties:";
+  } else if (category === "saas_fintech") {
+    emailSubject = "Request for Fair Terms & Consumer Protections";
+    emailOpening =
+      "Thank you for providing the service agreement. Before proceeding, I reviewed the terms of service and would appreciate addressing a few clauses to ensure fair consumer protections and balanced obligations:";
+  }
+
+  const emailItems: string[] = [];
+  flaggedClauses.forEach((c) => {
+    emailItems.push(`${c.title}: "${c.negotiationLine}"`);
+  });
+  missingProtections.forEach((p) => {
+    emailItems.push(`${p.title}: "${p.askFor}"`);
+  });
+
+  const numberedList = emailItems
+    .map((item, idx) => `${idx + 1}. ${item}`)
+    .join("\n\n");
+
+  const emailBody = `Hello,\n\n${emailOpening}\n\n${numberedList}\n\nCould we discuss these points and incorporate these adjustments into the final agreement? I would be glad to hop on a quick call or review an updated draft at your convenience.\n\nThank you for your time and understanding.\n\nBest regards,\n[Your Name]`;
+
   const negotiationEmail: NegotiationEmail = {
-    subject: "Discussion Regarding Proposed Agreement Terms",
-    body: `Hello,\n\nThank you for sharing the agreement for review.\n\nI have reviewed the terms and would like to propose a few minor adjustments to ensure the agreement is balanced and standard for both parties. In particular, I would appreciate discussing ${
-      flaggedClauses.length > 0
-        ? `the ${flaggedClauses[0].title.toLowerCase()} and ensuring notice/termination terms are mutual`
-        : "the notice period and standard exit protections"
-    }.\n\nPlease let me know when you are available for a brief discussion.\n\nBest regards,\n[Your Name]`,
+    subject: emailSubject,
+    body: emailBody,
   };
 
   return {

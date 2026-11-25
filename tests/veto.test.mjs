@@ -4,6 +4,7 @@ import {
   validateDocumentText,
   validateFileMetadata,
   extractJsonObject,
+  detectDocumentCategory,
   runLocalClauseAnalysis,
   normalizeAnalysisResult,
   getNormalizedSeverity,
@@ -182,13 +183,133 @@ describe("Deterministic Local Clause-Pattern Analyzer", () => {
     assert.ok(mutualNotice, "Mutual notice safeguard should be identified as missing");
   });
 
-  test("generates structured negotiation email draft", () => {
-    const text = `Mandatory training bond of 1,00,000 INR liquidated damages. 90 days notice period required.`;
+  test("detects document categories accurately from legal keywords", () => {
+    const rentalDoc = "Residential Tenancy Agreement between Landlord and Tenant regarding leased premises and security deposit.";
+    const internDoc = "Software Engineering Intern offer letter with monthly stipend, training bond, and non-compete.";
+    const saasDoc = "Cloud Platform Terms of Service regarding subscription plan, auto-renewal, user data, and limitation of liability.";
+
+    assert.equal(detectDocumentCategory(rentalDoc), "rental");
+    assert.equal(detectDocumentCategory(internDoc), "internship");
+    assert.equal(detectDocumentCategory(saasDoc), "saas_fintech");
+  });
+
+  test("flags saas_fintech auto-renewal and postal cancellation trap", () => {
+    const text = "Subscription will auto-renew annually. To cancel, you must send written notice via registered postal mail 60 days in advance. All fees are non-refundable.";
     const result = runLocalClauseAnalysis(text);
 
-    assert.ok(result.negotiationEmail.subject.length > 0);
-    assert.ok(result.negotiationEmail.body.includes("Hello"));
-    assert.ok(result.negotiationEmail.body.includes("[Your Name]"));
+    const trap = result.flaggedClauses.find((c) =>
+      c.title.includes("Auto-Renewal")
+    );
+    assert.ok(trap, "Auto-renewal and postal cancellation must be flagged");
+    assert.equal(trap?.risk, "High");
+    assert.match(trap?.negotiationLine || "", /digital one-click cancellation/i);
+  });
+
+  test("flags saas_fintech unrestricted data sharing and AI model training", () => {
+    const text = "Company may share user data with advertising third parties without consent and retains a perpetual royalty-free license to user content for AI training.";
+    const result = runLocalClauseAnalysis(text);
+
+    const trap = result.flaggedClauses.find((c) =>
+      c.title.includes("Data Exploitation") || c.title.includes("AI Training")
+    );
+    assert.ok(trap, "Broad data sharing and AI training must be flagged");
+    assert.equal(trap?.risk, "High");
+    assert.match(trap?.whyItMatters || "", /ai model training/i);
+  });
+
+  test("flags saas_fintech tiny liability cap and immediate data deletion without export window", () => {
+    const text = "Total aggregate liability shall not exceed INR 250 under any circumstances. Upon termination, company will immediately delete data with no obligation to return.";
+    const result = runLocalClauseAnalysis(text);
+
+    const trap = result.flaggedClauses.find((c) =>
+      c.title.includes("Liability Cap") || c.title.includes("Data Deletion")
+    );
+    assert.ok(trap, "Tiny liability cap and immediate data deletion must be flagged");
+    assert.equal(trap?.risk, "High");
+    assert.match(trap?.negotiationLine || "", /30-day window to export/i);
+  });
+
+  test("flags saas_fintech hidden fees, retroactive interest spikes, and auto-debit without notice", () => {
+    const text = "Bank reserves right to apply retroactive fee increases and revise interest rate without prior notice via auto-debit without notice.";
+    const result = runLocalClauseAnalysis(text);
+
+    const trap = result.flaggedClauses.find((c) =>
+      c.title.includes("Hidden Fees") || c.title.includes("Auto-Debit")
+    );
+    assert.ok(trap, "Hidden fees and unauthorized auto-debit must be flagged");
+    assert.equal(trap?.risk, "High");
+  });
+
+  test("enforces strict category-specific missing protections", () => {
+    // SaaS / Fintech document
+    const saasText = "Cloud subscription terms of service with recurring monthly fee and user data storage.";
+    const saasResult = runLocalClauseAnalysis(saasText);
+    const saasTitles = saasResult.missingProtections.map((p) => p.title);
+
+    assert.ok(saasTitles.includes("Digital Cancellation & Refunds"));
+    assert.ok(saasTitles.includes("30-Day Data Export Window"));
+    assert.ok(saasTitles.includes("Fair Liability Cap"));
+    // Must NOT contain rental or internship protections
+    assert.ok(!saasTitles.some((t) => t.includes("Deposit Return")));
+    assert.ok(!saasTitles.some((t) => t.includes("Side Project Carveout")));
+
+    // Rental document
+    const rentalText = "Apartment lease agreement between landlord and tenant. Security deposit of 50000.";
+    const rentalResult = runLocalClauseAnalysis(rentalText);
+    const rentalTitles = rentalResult.missingProtections.map((p) => p.title);
+
+    assert.ok(rentalTitles.includes("14-Day Deposit Return Timeline"));
+    assert.ok(rentalTitles.includes("Landlord Maintenance Obligations"));
+    // Must NOT contain SaaS or internship protections
+    assert.ok(!rentalTitles.includes("Digital Cancellation & Refunds"));
+    assert.ok(!rentalTitles.includes("Personal Side Project Carveout"));
+
+    // Internship document
+    const internText = "Software engineer intern offer letter with monthly stipend and training.";
+    const internResult = runLocalClauseAnalysis(internText);
+    const internTitles = internResult.missingProtections.map((p) => p.title);
+
+    assert.ok(internTitles.includes("Personal Side Project Carveout"));
+    assert.ok(internTitles.includes("Guaranteed Timely Stipend Release"));
+    // Must NOT contain rental or SaaS protections
+    assert.ok(!internTitles.includes("14-Day Deposit Return Timeline"));
+    assert.ok(!internTitles.includes("30-Day Data Export Window"));
+  });
+
+  test("generates dynamic category-specific negotiation email with numbered findings", () => {
+    // 1. Internship email
+    const internText = "Intern offer letter with training bond liquidated damages of 2,00,000 and 90 days notice.";
+    const internResult = runLocalClauseAnalysis(internText);
+
+    assert.equal(
+      internResult.negotiationEmail.subject,
+      "Proposed Revisions to Internship Offer Letter"
+    );
+    assert.match(internResult.negotiationEmail.body, /1\. /);
+    assert.match(internResult.negotiationEmail.body, /Exit Bond/i);
+    assert.match(internResult.negotiationEmail.body, /\[Your Name\]/);
+
+    // 2. Rental email
+    const rentalText = "Lease agreement between landlord and tenant. Landlord can enter at any time day or night without notice.";
+    const rentalResult = runLocalClauseAnalysis(rentalText);
+
+    assert.equal(
+      rentalResult.negotiationEmail.subject,
+      "Request for Balanced Residential Lease Terms"
+    );
+    assert.match(rentalResult.negotiationEmail.body, /1\. /);
+    assert.match(rentalResult.negotiationEmail.body, /Unannounced Entry/i);
+
+    // 3. SaaS / Fintech email
+    const saasText = "Subscription service agreement. Auto-renew with non-refundable fee. Total liability shall not exceed INR 250.";
+    const saasResult = runLocalClauseAnalysis(saasText);
+
+    assert.equal(
+      saasResult.negotiationEmail.subject,
+      "Request for Fair Terms & Consumer Protections"
+    );
+    assert.match(saasResult.negotiationEmail.body, /1\. /);
+    assert.match(saasResult.negotiationEmail.body, /Digital Cancellation & Refunds/i);
   });
 });
 
