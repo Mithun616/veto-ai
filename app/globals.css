@@ -20,6 +20,22 @@ body {
   font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Slow-Pulsing Ambient Glow behind Hero & Stage */
+@keyframes pulseGlow {
+  0%, 100% {
+    transform: scale(1) translate(-50%, 0);
+    opacity: 0.16;
+  }
+  50% {
+    transform: scale(1.06) translate(-50%, -2%);
+    opacity: 0.28;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 7s ease-in-out infinite;
+}
+
 /* X-Ray Laser Beam Animation (confined strictly behind content) */
 @keyframes xrayLaser {
   0% {

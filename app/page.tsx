@@ -53,6 +53,13 @@ Terms & Conditions:
 4. Maintenance & Structural Repairs: The Tenant is exclusively responsible for all repairs, water seepage fixes, electrical wiring issues, plumbing maintenance, and structural upkeep. The Landlord undertakes zero repair obligations.
 5. Eviction & Termination: The Landlord reserves the right to terminate this tenancy with 7 days verbal notice without assigning any reason. If the Tenant terminates before 11 months, the entire security deposit of INR 1,50,000 will be completely forfeited.`;
 
+const SAMPLE_SAAS = `SAAS & FREELANCE SERVICES MASTER AGREEMENT
+
+1. Intellectual Property & Ownership: Contractor hereby assigns all rights, title, and interest in all intellectual property, code, frameworks, and background tools created before or during this agreement exclusively to Client, with no reservation of pre-existing library rights.
+2. Payment & Unilateral Withholding: Invoices are payable net 90 days. Client reserves the right to withhold up to 40% of fees indefinitely if client deems work unsatisfactory at its sole discretion without objective criteria.
+3. Indemnification & Unlimited Liability: Contractor agrees to indemnify, defend, and hold harmless Client against any third-party claims without any monetary cap on liability. Client liability to Contractor is capped at $0.
+4. Non-Solicitation & Non-Compete: Contractor shall not provide development or design services to any company operating in the SaaS sector globally for 18 months following contract completion.`;
+
 const SCAN_STEPS = [
   "Reading document & extracting clauses...",
   "Flagging unfair training bonds & liabilities...",
@@ -60,10 +67,25 @@ const SCAN_STEPS = [
   "Drafting diplomatic negotiation email...",
 ];
 
+const DOC_TYPES = [
+  "Auto-Detect",
+  "Internship Offer",
+  "Rental Agreement",
+  "SaaS / Freelance",
+] as const;
+
+type DocType = (typeof DOC_TYPES)[number];
+type ResultFilter = "all" | "traps" | "rights" | "email";
+
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"paste" | "upload">("paste");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentText, setDocumentText] = useState("");
+  const [docType, setDocType] = useState<DocType>("Auto-Detect");
+  const [docTypeOpen, setDocTypeOpen] = useState(false);
+  const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
+  const [openQuotes, setOpenQuotes] = useState<Record<number, boolean>>({});
+
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
@@ -74,10 +96,25 @@ export default function HomePage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const characterCount = documentText.length;
   const canScan =
-    activeTab === "upload" ? selectedFile !== null : characterCount >= 50;
+    activeTab === "upload" ? selectedFile !== null : characterCount >= 20;
+
+  // Close docType dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setDocTypeOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Stepper timer during loading
   useEffect(() => {
@@ -151,6 +188,35 @@ export default function HomePage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleSelectDocType = (type: DocType) => {
+    setDocType(type);
+    setDocTypeOpen(false);
+
+    if (type === "Internship Offer") {
+      setActiveTab("paste");
+      setDocumentText(SAMPLE_INTERNSHIP);
+      setSelectedFile(null);
+      setError(null);
+    } else if (type === "Rental Agreement") {
+      setActiveTab("paste");
+      setDocumentText(SAMPLE_RENTAL);
+      setSelectedFile(null);
+      setError(null);
+    } else if (type === "SaaS / Freelance") {
+      setActiveTab("paste");
+      setDocumentText(SAMPLE_SAAS);
+      setSelectedFile(null);
+      setError(null);
+    }
+  };
+
+  const toggleQuote = (idx: number) => {
+    setOpenQuotes((prev) => ({
+      ...prev,
+      [idx]: !prev[idx],
+    }));
+  };
+
   const handleScan = async () => {
     if (!canScan || loading) return;
 
@@ -159,6 +225,8 @@ export default function HomePage() {
     setDisplayScore(0);
     setError(null);
     setResult(null);
+    setOpenQuotes({});
+    setResultFilter("all");
 
     try {
       let response: Response;
@@ -216,7 +284,7 @@ export default function HomePage() {
   const getRiskMeta = (score: number, riskLevel?: string) => {
     if (score >= 70 || riskLevel === "High") {
       return {
-        pill: "bg-[#D4FF2A] text-[#05070C] font-bold",
+        pill: "bg-[#D4FF2A] text-[#05070C] font-bold shadow-[0_0_12px_rgba(212,255,42,0.3)]",
         verdict: "HIGH RISK — DO NOT SIGN AS-IS",
         color: "text-[#D4FF2A]",
         ringColor: "#D4FF2A",
@@ -225,7 +293,7 @@ export default function HomePage() {
     }
     if (score >= 35 || riskLevel === "Medium") {
       return {
-        pill: "bg-[#2563EB] text-white font-bold",
+        pill: "bg-[#2563EB] text-white font-bold shadow-[0_0_12px_rgba(37,99,235,0.3)]",
         verdict: "MEDIUM RISK — ASK FOR CHANGES",
         color: "text-[#60A5FA]",
         ringColor: "#60A5FA",
@@ -277,15 +345,15 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#05070C] text-[#F8FAFC] flex flex-col font-sans selection:bg-[#D4FF2A] selection:text-[#05070C] relative">
-      {/* Soft Cobalt Blue Radial Glow behind Hero */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[520px] bg-gradient-to-b from-[#2563EB]/15 via-[#2563EB]/5 to-transparent blur-3xl pointer-events-none -z-10" />
+      {/* Slow-pulsing ambient glow behind Hero & Command Stage */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[640px] bg-gradient-to-b from-[#2563EB]/20 via-[#60A5FA]/10 to-[#D4FF2A]/5 blur-3xl pointer-events-none -z-10 animate-pulse-glow" />
 
-      {/* Top Navbar: max-w-7xl px-6 sm:px-8 lg:px-12 */}
-      <header className="sticky top-0 z-40 bg-[#05070C]/80 backdrop-blur-xl border-b border-white/10">
+      {/* Top Navbar */}
+      <header className="sticky top-0 z-40 bg-[#05070C]/80 backdrop-blur-2xl border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* VetoAI Shield Mark */}
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#D4FF2A] via-[#60A5FA] to-[#2563EB] p-[1.5px] shadow-lg shadow-[#D4FF2A]/10">
+            {/* VetoAI Shield Mark with subtle hover glow */}
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#D4FF2A] via-[#60A5FA] to-[#2563EB] p-[1.5px] shadow-lg shadow-[#D4FF2A]/10 hover:shadow-[#D4FF2A]/25 transition-all">
               <div className="w-full h-full bg-[#05070C] rounded-[10px] flex items-center justify-center">
                 <svg
                   className="w-5 h-5 text-[#D4FF2A]"
@@ -329,11 +397,11 @@ export default function HomePage() {
 
       {/* Main Single Centered Command Stage: max-w-4xl mx-auto */}
       <main className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-        <div className="rounded-2xl border border-white/10 bg-[#0A0F1C]/90 p-5 sm:p-7 backdrop-blur-md shadow-2xl relative">
-          {/* Top Bar: Segmented Tab Switch + Minimal Sample Links */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-2xl p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-[#60A5FA]/40 hover:shadow-[0_12px_40px_rgba(37,99,235,0.18)] transition-all duration-300 relative">
+          {/* Top Bar: Segmented Tab Switch + Interactive Document Type Dropdown */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
             {/* Segmented Tab Switch */}
-            <div className="inline-flex p-1 rounded-xl bg-[#05070C] border border-white/10 self-start">
+            <div className="inline-flex p-1 rounded-xl bg-[#05070C]/90 border border-white/10 self-start shadow-inner">
               <button
                 type="button"
                 onClick={() => {
@@ -342,7 +410,7 @@ export default function HomePage() {
                 }}
                 className={`px-4 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
                   activeTab === "paste"
-                    ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/20"
+                    ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/25"
                     : "text-[#CBD5E1] hover:text-white"
                 }`}
               >
@@ -356,7 +424,7 @@ export default function HomePage() {
                 }}
                 className={`px-4 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
                   activeTab === "upload"
-                    ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/20"
+                    ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/25"
                     : "text-[#CBD5E1] hover:text-white"
                 }`}
               >
@@ -364,36 +432,55 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Minimal Sample Links */}
-            <div className="flex items-center gap-3 text-xs font-mono">
-              <span className="text-slate-500 text-[11px] uppercase tracking-wider">
-                Samples:
+            {/* Custom Interactive Document Type Dropdown */}
+            <div className="flex items-center gap-2" ref={dropdownRef}>
+              <span className="text-slate-500 text-[11px] font-mono uppercase tracking-wider hidden sm:inline">
+                Preset:
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("paste");
-                  setDocumentText(SAMPLE_INTERNSHIP);
-                  setSelectedFile(null);
-                  setError(null);
-                }}
-                className="text-[#60A5FA] hover:text-[#D4FF2A] transition-colors underline-offset-4 hover:underline"
-              >
-                Internship Sample ↗
-              </button>
-              <span className="text-white/20">·</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("paste");
-                  setDocumentText(SAMPLE_RENTAL);
-                  setSelectedFile(null);
-                  setError(null);
-                }}
-                className="text-[#60A5FA] hover:text-[#D4FF2A] transition-colors underline-offset-4 hover:underline"
-              >
-                Rental Sample ↗
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setDocTypeOpen((prev) => !prev)}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#05070C]/90 border border-white/10 hover:border-[#60A5FA]/50 text-xs font-mono font-semibold text-[#60A5FA] hover:text-white transition-all flex items-center gap-2 shadow-sm"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA]" />
+                  <span>{docType}</span>
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      docTypeOpen ? "rotate-180" : ""
+                    }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+
+                {docTypeOpen && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-xl bg-[#0A0F1C]/95 backdrop-blur-2xl border border-white/10 p-1.5 shadow-2xl z-30 animate-fade-up">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 px-3 py-1.5">
+                      Select Contract Type
+                    </div>
+                    {DOC_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => handleSelectDocType(type)}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-mono transition-all flex items-center justify-between ${
+                          docType === type
+                            ? "bg-[#2563EB] text-white font-semibold"
+                            : "text-[#CBD5E1] hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        <span>{type}</span>
+                        {docType === type && <span className="text-xs">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -404,8 +491,8 @@ export default function HomePage() {
                 value={documentText}
                 onChange={(e) => setDocumentText(e.target.value)}
                 rows={7}
-                placeholder="Paste offer letter, rental agreement, or contract clause here... (min. 50 characters)"
-                className="w-full bg-[#05070C]/70 text-[#F8FAFC] placeholder-slate-500 border border-white/10 rounded-xl p-4 text-[15px] font-mono leading-relaxed focus:outline-none focus:border-[#60A5FA] transition-colors resize-y min-h-[180px]"
+                placeholder="Paste offer letter, rental agreement, or contract clause here... (min. 20 characters)"
+                className="w-full bg-[#05070C]/70 text-[#F8FAFC] placeholder-slate-500 border border-white/10 rounded-xl p-4 text-[15px] font-mono leading-relaxed focus:outline-none focus:border-[#60A5FA] focus:ring-1 focus:ring-[#60A5FA]/30 transition-all resize-y min-h-[180px]"
               />
             ) : (
               <div>
@@ -498,8 +585,8 @@ export default function HomePage() {
                     {characterCount}
                   </strong>{" "}
                   chars
-                  {characterCount < 50 && (
-                    <span className="text-slate-500 ml-1.5">(min 50)</span>
+                  {characterCount < 20 && (
+                    <span className="text-slate-500 ml-1.5">(min 20)</span>
                   )}
                 </span>
               ) : (
@@ -519,7 +606,7 @@ export default function HomePage() {
               type="button"
               onClick={handleScan}
               disabled={!canScan || loading}
-              className="bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm px-7 py-2.5 rounded-full transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,255,42,0.25)] flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+              className="bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm px-7 py-2.5 rounded-full transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,255,42,0.25)] hover:shadow-[0_0_28px_rgba(212,255,42,0.4)] flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
             >
               {loading ? "Scanning..." : "Run X-Ray Scan →"}
             </button>
@@ -528,7 +615,7 @@ export default function HomePage() {
 
         {/* Loading State: Confined Laser Scanner */}
         {loading && (
-          <div className="mt-8 rounded-2xl border border-[#60A5FA]/30 bg-[#0A0F1C]/90 p-6 sm:p-8 overflow-hidden backdrop-blur-md shadow-2xl relative animate-fade-up">
+          <div className="mt-8 rounded-2xl border border-[#60A5FA]/30 bg-white/[0.03] backdrop-blur-2xl p-6 sm:p-8 overflow-hidden shadow-2xl relative animate-fade-up">
             {/* Confined laser beam in background (z-0) */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
               <div className="absolute left-0 right-0 h-[2.5px] bg-gradient-to-r from-transparent via-[#D4FF2A] to-[#60A5FA] blur-[0.5px] animate-xray-laser shadow-[0_0_12px_#D4FF2A]" />
@@ -585,10 +672,10 @@ export default function HomePage() {
       {result && !loading && (
         <section
           ref={resultsRef}
-          className="w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 mt-12 mb-20 space-y-10 animate-fade-up"
+          className="w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 mt-12 mb-20 space-y-8 animate-fade-up"
         >
-          {/* Top Executive Verdict Banner (3-Part Horizontal Bar on Desktop) */}
-          <div className="p-7 sm:p-8 rounded-2xl bg-[#0A0F1C] border border-white/10 backdrop-blur-md shadow-2xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Top Executive Verdict Banner (Frosted Glass 3-Part Bar) */}
+          <div className="p-7 sm:p-8 rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-[#60A5FA]/40 hover:shadow-[0_12px_40px_rgba(37,99,235,0.18)] transition-all duration-300 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Part 1: Circular Risk Score Gauge */}
             <div className="lg:col-span-3 flex flex-col sm:flex-row lg:flex-col items-center justify-center gap-4 text-center sm:text-left lg:text-center">
               <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
@@ -788,151 +875,262 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Clean 2-Column Hairline Results: lg:grid-cols-[1.35fr_1fr] gap-10 */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-10 items-start">
+          {/* Interactive Result Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-white/10">
+            <button
+              type="button"
+              onClick={() => setResultFilter("all")}
+              className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                resultFilter === "all"
+                  ? "bg-[#2563EB] text-white shadow-lg shadow-[#2563EB]/25"
+                  : "bg-white/[0.03] text-[#CBD5E1] hover:text-white hover:bg-white/[0.06] border border-white/5"
+              }`}
+            >
+              <span>All Findings</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-white/15 text-[10px]">
+                {totalFindings}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setResultFilter("traps")}
+              className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                resultFilter === "traps"
+                  ? "bg-[#2563EB] text-white shadow-lg shadow-[#2563EB]/25"
+                  : "bg-white/[0.03] text-[#CBD5E1] hover:text-white hover:bg-white/[0.06] border border-white/5"
+              }`}
+            >
+              <span>Flagged Traps</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-[#D4FF2A]/20 text-[#D4FF2A] text-[10px] font-bold">
+                {result.flaggedClauses.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setResultFilter("rights")}
+              className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                resultFilter === "rights"
+                  ? "bg-[#2563EB] text-white shadow-lg shadow-[#2563EB]/25"
+                  : "bg-white/[0.03] text-[#CBD5E1] hover:text-white hover:bg-white/[0.06] border border-white/5"
+              }`}
+            >
+              <span>Missing Rights</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-[#60A5FA]/20 text-[#60A5FA] text-[10px]">
+                {result.missingProtections.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setResultFilter("email")}
+              className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all whitespace-nowrap flex items-center gap-2 ${
+                resultFilter === "email"
+                  ? "bg-[#2563EB] text-white shadow-lg shadow-[#2563EB]/25"
+                  : "bg-white/[0.03] text-[#CBD5E1] hover:text-white hover:bg-white/[0.06] border border-white/5"
+              }`}
+            >
+              <span>Negotiation Email</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-[10px]">
+                Ready
+              </span>
+            </button>
+          </div>
+
+          {/* Clean 2-Column Hairline Results (Filtered dynamically) */}
+          <div
+            className={`grid grid-cols-1 ${
+              resultFilter === "all"
+                ? "lg:grid-cols-[1.35fr_1fr]"
+                : "lg:grid-cols-1"
+            } gap-10 items-start`}
+          >
             {/* Left Column: Flagged Traps + Missing Rights */}
-            <div className="space-y-12">
-              {/* 01 / FLAGGED TRAPS */}
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-6">
-                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
-                    <span>01 /</span> Flagged Traps ({result.flaggedClauses.length})
-                  </h3>
-                </div>
+            {(resultFilter === "all" ||
+              resultFilter === "traps" ||
+              resultFilter === "rights") && (
+              <div className="space-y-10">
+                {/* 01 / FLAGGED TRAPS */}
+                {(resultFilter === "all" || resultFilter === "traps") && (
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-6">
+                      <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
+                        <span>01 /</span> Flagged Traps (
+                        {result.flaggedClauses.length})
+                      </h3>
+                    </div>
 
-                <div className="space-y-6">
-                  {result.flaggedClauses.map((clause, idx) => {
-                    const clauseRisk = getRiskMeta(0, clause.risk);
-                    return (
-                      <div
-                        key={idx}
-                        className="border-t border-white/10 pt-5 first:border-0 first:pt-0 space-y-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="text-base font-bold text-white tracking-tight">
-                            {clause.title}
-                          </h4>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase ${clauseRisk.pill}`}
+                    <div className="space-y-4">
+                      {result.flaggedClauses.map((clause, idx) => {
+                        const clauseRisk = getRiskMeta(0, clause.risk);
+                        const isQuoteOpen = openQuotes[idx] || false;
+                        return (
+                          <div
+                            key={idx}
+                            className="p-5 rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:-translate-y-0.5 hover:border-[#60A5FA]/40 hover:shadow-[0_10px_35px_rgba(37,99,235,0.15)] transition-all duration-300 space-y-3.5"
                           >
-                            {clause.risk}
-                          </span>
-                        </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <h4 className="text-base font-bold text-white tracking-tight">
+                                {clause.title}
+                              </h4>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase ${clauseRisk.pill}`}
+                              >
+                                {clause.risk}
+                              </span>
+                            </div>
 
-                        {clause.quote && (
-                          <p className="text-xs font-mono italic text-[#CBD5E1] pl-3 border-l-2 border-[#60A5FA]/40 py-0.5 leading-relaxed">
-                            &ldquo;{clause.quote}&rdquo;
-                          </p>
-                        )}
+                            {/* Why it hurts */}
+                            <p className="text-sm text-[#F8FAFC] leading-relaxed">
+                              <span className="text-xs font-mono uppercase tracking-wider text-slate-400 mr-2">
+                                Why it hurts:
+                              </span>
+                              {clause.whyItMatters}
+                            </p>
 
-                        <div className="space-y-1 text-sm">
-                          <p className="text-[#CBD5E1] leading-relaxed">
-                            <span className="text-xs font-mono uppercase tracking-wider text-slate-400 mr-2">
-                              Why it hurts:
-                            </span>
-                            {clause.whyItMatters}
-                          </p>
-                          <p className="text-[#D4FF2A] font-medium leading-relaxed pt-1">
-                            <span className="text-xs font-mono uppercase tracking-wider text-[#60A5FA] mr-2">
-                              Say this:
-                            </span>
-                            &ldquo;{clause.negotiationLine}&rdquo;
-                          </p>
-                        </div>
+                            {/* Say this */}
+                            <p className="text-sm text-[#D4FF2A] font-medium leading-relaxed">
+                              <span className="text-xs font-mono uppercase tracking-wider text-[#60A5FA] mr-2">
+                                Say this:
+                              </span>
+                              &ldquo;{clause.negotiationLine}&rdquo;
+                            </p>
+
+                            {/* Collapsible View Exact Quote Accordion */}
+                            {clause.quote && (
+                              <div className="pt-1 border-t border-white/5">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleQuote(idx)}
+                                  className="text-xs font-mono text-[#60A5FA] hover:text-[#D4FF2A] transition-colors flex items-center gap-1.5 py-1"
+                                >
+                                  <span>
+                                    {isQuoteOpen
+                                      ? "Hide Contract Quote"
+                                      : "View Exact Quote"}
+                                  </span>
+                                  <svg
+                                    className={`w-3.5 h-3.5 transition-transform duration-200 transform ${
+                                      isQuoteOpen ? "rotate-180" : ""
+                                    }`}
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                  >
+                                    <polyline points="6 9 12 15 18 9" />
+                                  </svg>
+                                </button>
+
+                                {isQuoteOpen && (
+                                  <div className="mt-2 pl-3.5 py-2.5 pr-3 border-l-2 border-[#60A5FA]/60 bg-[#05070C]/60 rounded-r-xl text-xs font-mono italic text-[#CBD5E1] leading-relaxed animate-fade-up">
+                                    &ldquo;{clause.quote}&rdquo;
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 02 / MISSING RIGHTS */}
+                {(resultFilter === "all" || resultFilter === "rights") &&
+                  result.missingProtections.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-6">
+                        <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
+                          <span>02 /</span> Missing Rights (
+                          {result.missingProtections.length})
+                        </h3>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      <div className="space-y-4">
+                        {result.missingProtections.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="p-5 rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:-translate-y-0.5 hover:border-[#60A5FA]/40 hover:shadow-[0_10px_35px_rgba(37,99,235,0.15)] transition-all duration-300 space-y-2.5"
+                          >
+                            <h4 className="text-base font-bold text-white tracking-tight">
+                              {item.title}
+                            </h4>
+                            <p className="text-sm text-[#F8FAFC] leading-relaxed">
+                              <span className="text-xs font-mono uppercase tracking-wider text-slate-400 mr-2">
+                                What&apos;s missing:
+                              </span>
+                              {item.whyItMatters}
+                            </p>
+                            <p className="text-sm text-[#60A5FA] font-medium leading-relaxed">
+                              <span className="text-xs font-mono uppercase tracking-wider text-[#D4FF2A] mr-2">
+                                Ask to add:
+                              </span>
+                              &ldquo;{item.askFor}&rdquo;
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </div>
-
-              {/* 02 / MISSING RIGHTS */}
-              {result.missingProtections.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-6">
-                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
-                      <span>02 /</span> Missing Rights (
-                      {result.missingProtections.length})
-                    </h3>
-                  </div>
-
-                  <div className="space-y-6">
-                    {result.missingProtections.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="border-t border-white/10 pt-5 first:border-0 first:pt-0 space-y-2"
-                      >
-                        <h4 className="text-base font-bold text-white tracking-tight">
-                          {item.title}
-                        </h4>
-                        <p className="text-sm text-[#CBD5E1] leading-relaxed">
-                          <span className="text-xs font-mono uppercase tracking-wider text-slate-400 mr-2">
-                            What&apos;s missing:
-                          </span>
-                          {item.whyItMatters}
-                        </p>
-                        <p className="text-sm text-[#60A5FA] font-medium leading-relaxed">
-                          <span className="text-xs font-mono uppercase tracking-wider text-[#D4FF2A] mr-2">
-                            Ask to add:
-                          </span>
-                          &ldquo;{item.askFor}&rdquo;
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Right Column: Sticky Pushback Negotiation Email */}
-            <div>
-              <div className="sticky top-24 rounded-2xl bg-[#0A0F1C] border border-white/10 p-6 backdrop-blur-md shadow-2xl space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
-                    <span>03 /</span> Negotiation Email
-                  </h3>
-                  <span className="text-[11px] font-mono text-[#CBD5E1]">
-                    Ready-to-send
-                  </span>
-                </div>
-
-                <div className="space-y-3 font-mono text-xs">
-                  <div className="p-3 rounded-xl bg-[#05070C] border border-white/10 text-[#CBD5E1]">
-                    <span className="text-slate-500 mr-2">Subject:</span>
-                    <span className="text-white font-semibold">
-                      {result.negotiationEmail.subject}
+            {(resultFilter === "all" || resultFilter === "email") && (
+              <div className={resultFilter === "email" ? "max-w-2xl mx-auto w-full" : ""}>
+                <div className="sticky top-24 rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 p-6 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-[#60A5FA]/40 hover:shadow-[0_12px_40px_rgba(37,99,235,0.18)] transition-all duration-300 space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
+                      <span>03 /</span> Negotiation Email
+                    </h3>
+                    <span className="text-[11px] font-mono text-[#CBD5E1]">
+                      Ready-to-send
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-[#05070C] border border-white/10 text-[#F8FAFC] font-sans text-sm leading-relaxed whitespace-pre-line max-h-[380px] overflow-y-auto">
-                    {result.negotiationEmail.body}
+                  <div className="space-y-3 font-mono text-xs">
+                    <div className="p-3.5 rounded-xl bg-[#05070C]/80 border border-white/10 text-[#CBD5E1]">
+                      <span className="text-slate-500 mr-2">Subject:</span>
+                      <span className="text-white font-semibold">
+                        {result.negotiationEmail.subject}
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#05070C]/80 border border-white/10 text-[#F8FAFC] font-sans text-sm leading-relaxed whitespace-pre-line max-h-[380px] overflow-y-auto">
+                      {result.negotiationEmail.body}
+                    </div>
+                  </div>
+
+                  {/* Email Action Buttons */}
+                  <div className="space-y-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCopyEmail}
+                      className="w-full bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm py-3 px-6 rounded-full transition-all duration-200 shadow-[0_0_20px_rgba(212,255,42,0.25)] hover:shadow-[0_0_28px_rgba(212,255,42,0.4)] flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
+                    >
+                      {copied ? (
+                        <span>Copied! ✓</span>
+                      ) : (
+                        <span>Copy Email →</span>
+                      )}
+                    </button>
+
+                    <a
+                      href={`https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(
+                        result.negotiationEmail.subject
+                      )}&body=${encodeURIComponent(result.negotiationEmail.body)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full border border-[#60A5FA]/40 hover:border-[#60A5FA] text-[#60A5FA] hover:text-white hover:bg-[#2563EB]/15 font-bold text-sm py-2.5 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 text-center shadow-sm"
+                    >
+                      <span>Open in Gmail →</span>
+                    </a>
                   </div>
                 </div>
-
-                {/* Email Action Buttons */}
-                <div className="space-y-2.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleCopyEmail}
-                    className="w-full bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm py-3 px-6 rounded-full transition-all duration-200 shadow-[0_0_20px_rgba(212,255,42,0.25)] flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
-                  >
-                    {copied ? (
-                      <span>Copied! ✓</span>
-                    ) : (
-                      <span>Copy Email →</span>
-                    )}
-                  </button>
-
-                  <a
-                    href={`mailto:?subject=${encodeURIComponent(
-                      result.negotiationEmail.subject
-                    )}&body=${encodeURIComponent(result.negotiationEmail.body)}`}
-                    className="w-full border border-[#60A5FA]/40 hover:border-[#60A5FA] text-[#60A5FA] hover:text-white hover:bg-[#2563EB]/15 font-bold text-sm py-2.5 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 text-center"
-                  >
-                    <span>Open in Mail App →</span>
-                  </a>
-                </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
       )}
