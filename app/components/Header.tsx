@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { User } from "firebase/auth";
 
 interface HeaderProps {
@@ -102,10 +103,12 @@ export function Header({
               {/* User Avatar & Name */}
               <div className="flex items-center gap-2 pl-1 border-l border-white/10">
                 {user.photoURL ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
+                  <Image
                     src={user.photoURL}
                     alt={user.displayName || "User avatar"}
+                    width={28}
+                    height={28}
+                    unoptimized
                     className="w-7 h-7 rounded-full border border-white/20 object-cover"
                   />
                 ) : (

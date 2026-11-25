@@ -146,11 +146,8 @@ export async function extractTextFromRequest(req: NextRequest): Promise<Extracte
  */
 export async function extractPdfTextFallback(pdfBuffer: Buffer): Promise<string> {
   try {
-    console.log("[VetoAI] Extracting text from PDF buffer via unpdf...");
     const extracted = await extractText(new Uint8Array(pdfBuffer), { mergePages: true });
-    const text = (extracted.text || "").trim();
-    console.log(`[VetoAI] Extracted ${text.length} characters from PDF using unpdf.`);
-    return text;
+    return (extracted.text || "").trim();
   } catch (err) {
     console.warn("[VetoAI] unpdf text extraction failed:", err);
     return "";

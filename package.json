@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "node --no-warnings --experimental-strip-types --test tests/veto.test.mjs tests/firestore-rules-logic.test.mjs tests/firestore-rules.emulator.test.mjs"
   },
   "dependencies": {

@@ -34,8 +34,6 @@ async function callOpenAiCompatibleChat(options: OpenAiChatOptions): Promise<str
   const { url, apiKey, model, systemPrompt, userPrompt, timeoutMs, jsonFormat, maxTokens, providerName } = options;
 
   try {
-    console.log(`[VetoAI] Attempting ${providerName} with model: ${model}...`);
-
     const requestBody: Record<string, unknown> = {
       model,
       messages: [
@@ -69,7 +67,6 @@ async function callOpenAiCompatibleChat(options: OpenAiChatOptions): Promise<str
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data.choices?.[0]?.message?.content;
     if (content) {
-      console.log(`[VetoAI] Successfully received analysis from ${providerName} model: ${model}`);
       return content;
     }
     return null;
@@ -174,7 +171,6 @@ export async function analyzeWithGemini(
         const response = await Promise.race([generatePromise, timeoutPromise]);
 
         if (response.text) {
-          console.log(`[VetoAI] Successfully analyzed via Gemini model: ${model}`);
           return response.text;
         }
       } catch (err) {
