@@ -1,17 +1,33 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
+import type { User } from "firebase/auth";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
 import { HowItWorks } from "./components/HowItWorks";
 import { DocumentWorkspace } from "./components/DocumentWorkspace";
 import { AnalysisLoading } from "./components/AnalysisLoading";
 import { RiskOverview } from "./components/RiskOverview";
+import {
+  ClauseOverview,
+  SeverityFilter,
+  getNormalizedSeverity,
+  getSeverityRank,
+} from "./components/ClauseOverview";
 import { ClauseCard } from "./components/ClauseCard";
 import { MissingProtectionCard } from "./components/MissingProtectionCard";
 import { NegotiationEmailCard } from "./components/NegotiationEmailCard";
+import { SavedScansDrawer } from "./components/SavedScansDrawer";
 import { Footer } from "./components/Footer";
 import { AnalysisResult, InputTab } from "./components/types";
+import {
+  onAuthChange,
+  signInWithGoogle,
+  signOutUser,
+  saveScanToFirestore,
+  getUserScans,
+  type SavedScan,
+} from "@/lib/firebase";
 
 const SAMPLE_INTERNSHIP = `INTERNSHIP & TRAINING OFFER LETTER - APEX CLOUD TECH PVT. LTD. (BANGALORE)
 
@@ -45,10 +61,81 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isStale, setIsStale] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<SeverityFilter>("all");
+  const [userToggledIds, setUserToggledIds] = useState<Record<string, boolean>>({});
+
+  // Optional Firebase auth & scan history
+  const [user, setUser] = useState<User | null>(null);
+  const [savedScans, setSavedScans] = useState<SavedScan[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+
+  // Subscribe to Firebase auth changes on mount
+  useEffect(() => {
+    const unsubscribe = onAuthChange(async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const scans = await getUserScans(currentUser.uid);
+          setSavedScans(scans);
+        } catch (err) {
+          console.warn("[VetoAI] Failed to load scans:", err);
+        }
+      } else {
+        setSavedScans([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Generate stable identified clauses and sort: High -> Medium -> Low -> Unrated
+  const sortedClauses = useMemo(() => {
+    if (!result?.flaggedClauses) return [];
+    const identified = result.flaggedClauses.map((clause, idx) => ({
+      clause,
+      id: `clause-${idx}-${clause.title
+        .replace(/[^a-zA-Z0-9]/g, "-")
+        .toLowerCase()
+        .slice(0, 24)}`,
+      originalIndex: idx,
+      severity: getNormalizedSeverity(clause.risk),
+    }));
+
+    // Stable sort preserving original order within each severity group (High -> Medium -> Low -> Unrated)
+    return [...identified].sort(
+      (a, b) => getSeverityRank(a.severity) - getSeverityRank(b.severity)
+    );
+  }, [result]);
+
+  // Initially expand only the first High concern. If no High concern, expand the first finding.
+  const defaultExpandedId = useMemo(() => {
+    if (!sortedClauses.length) return null;
+    const firstHigh = sortedClauses.find((c) => c.severity === "High");
+    return firstHigh ? firstHigh.id : sortedClauses[0]?.id;
+  }, [sortedClauses]);
+
+  // Toggle independent card expansion
+  const toggleClause = (id: string) => {
+    setUserToggledIds((prev) => {
+      const isCurrentlyExpanded =
+        prev[id] !== undefined ? prev[id] : id === defaultExpandedId;
+      return {
+        ...prev,
+        [id]: !isCurrentlyExpanded,
+      };
+    });
+  };
+
+  // Filter clauses by active severity filter
+  const filteredClauses = useMemo(() => {
+    if (activeFilter === "all") return sortedClauses;
+    return sortedClauses.filter(
+      (c) => c.severity.toLowerCase() === activeFilter
+    );
+  }, [sortedClauses, activeFilter]);
 
   // Focus and scroll to workspace
   const handleScrollToWorkspace = () => {
@@ -117,6 +204,7 @@ export default function HomePage() {
     setSelectedFile(null);
     setError(null);
     setIsStale(false);
+    setUserToggledIds({});
   };
 
   // Submit for analysis
@@ -161,7 +249,29 @@ export default function HomePage() {
       }
 
       setResult(data as AnalysisResult);
+      setActiveFilter("all");
+      setUserToggledIds({});
       setIsStale(false);
+
+      // If signed in, automatically persist to Firestore scan history
+      if (user) {
+        const snippet =
+          documentText.slice(0, 45).trim() ||
+          selectedFile?.name ||
+          "Contract Audit";
+        saveScanToFirestore(user.uid, {
+          title: snippet,
+          overallRisk: data.overallRisk,
+          riskScore: data.riskScore,
+          summary: data.summary,
+          analysis: data as AnalysisResult,
+        })
+          .then(async () => {
+            const updated = await getUserScans(user.uid);
+            setSavedScans(updated);
+          })
+          .catch((err) => console.warn("[VetoAI] Failed to save scan:", err));
+      }
 
       // Smooth scroll to results
       setTimeout(() => {
@@ -181,8 +291,42 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#07090D] text-[#F5F7FA] bg-grid-subtle flex flex-col justify-between">
       <div>
-        {/* Semantic Header */}
-        <Header />
+        {/* Semantic Header with Auth & History Controls */}
+        <Header
+          user={user}
+          historyCount={savedScans.length}
+          onSignIn={async () => {
+            const loggedInUser = await signInWithGoogle();
+            if (loggedInUser) {
+              setUser(loggedInUser);
+              const scans = await getUserScans(loggedInUser.uid);
+              setSavedScans(scans);
+            }
+          }}
+          onSignOut={async () => {
+            await signOutUser();
+            setUser(null);
+            setSavedScans([]);
+          }}
+          onToggleHistory={() => setIsHistoryOpen(true)}
+        />
+
+        {/* Collapsible Saved Scans Drawer */}
+        <SavedScansDrawer
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          scans={savedScans}
+          onSelectScan={(scan) => {
+            setResult(scan.analysis);
+            setActiveFilter("all");
+            setUserToggledIds({});
+            setIsStale(false);
+            setIsHistoryOpen(false);
+            setTimeout(() => {
+              resultsRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
+          }}
+        />
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 pb-16">
           {/* Hero Section */}
@@ -261,33 +405,61 @@ export default function HomePage() {
               {/* Section A: Overview */}
               <RiskOverview result={result} />
 
-              {/* Section B: Flagged Clauses */}
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-[#F5F7FA]">
-                      Flagged Clauses
-                    </h2>
-                    <p className="text-xs sm:text-sm text-[#ABB5C5]">
-                      Potentially concerning terms that deviate from balanced standards.
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono px-3 py-1 rounded-full bg-[#161B23] border border-white/10 text-[#ABB5C5]">
-                    {result.flaggedClauses?.length ?? 0} identified
-                  </span>
-                </div>
+              {/* Section B: Document Risk Overview & Flagged Clauses */}
+              <section className="space-y-6">
+                <ClauseOverview
+                  clauses={result.flaggedClauses || []}
+                  activeFilter={activeFilter}
+                  onFilterChange={setActiveFilter}
+                />
 
-                {result.flaggedClauses && result.flaggedClauses.length > 0 ? (
-                  <div className="space-y-4">
-                    {result.flaggedClauses.map((clause, idx) => (
-                      <ClauseCard key={idx} clause={clause} index={idx} />
-                    ))}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-[#F5F7FA]">
+                        Flagged Clauses
+                      </h2>
+                      <p className="text-xs sm:text-sm text-[#ABB5C5]">
+                        Sorted by severity: High concerns first, followed by Medium and Low.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono px-3 py-1 rounded-full bg-[#161B23] border border-white/10 text-[#ABB5C5]">
+                      Showing {filteredClauses.length} of {sortedClauses.length}
+                    </span>
                   </div>
-                ) : (
-                  <div className="p-6 rounded-2xl bg-[#101319] border border-white/10 text-center text-xs text-[#ABB5C5]">
-                    No concerning clauses were flagged in the provided text.
-                  </div>
-                )}
+
+                  {filteredClauses.length > 0 ? (
+                    <div className="space-y-3">
+                      {filteredClauses.map((item) => (
+                        <ClauseCard
+                          key={item.id}
+                          id={item.id}
+                          clause={item.clause}
+                          index={item.originalIndex}
+                          isExpanded={
+                            userToggledIds[item.id] !== undefined
+                              ? userToggledIds[item.id]
+                              : item.id === defaultExpandedId
+                          }
+                          onToggle={() => toggleClause(item.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : sortedClauses.length > 0 ? (
+                    <div className="p-8 rounded-2xl bg-[#101319] border border-white/[0.08] text-center space-y-3">
+                      <p className="text-sm font-medium text-[#F5F7FA]">
+                        No {activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)} concern clauses found.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFilter("all")}
+                        className="px-4 py-2 rounded-xl bg-[#161B23] hover:bg-[#1f2633] text-xs font-medium text-[#6CA8FF] hover:text-white border border-white/10 transition-colors"
+                      >
+                        Show all flagged clauses ({sortedClauses.length})
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </section>
 
               {/* Section C: Missing Protections */}
@@ -295,10 +467,10 @@ export default function HomePage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl sm:text-2xl font-bold text-[#F5F7FA]">
-                      Protections not found in the supplied text
+                      Protections not found in this text
                     </h2>
                     <p className="text-xs sm:text-sm text-[#ABB5C5]">
-                      These may appear elsewhere in the full agreement, but should be confirmed before signing.
+                      These may appear elsewhere in the full agreement.
                     </p>
                   </div>
                   <span className="text-xs font-mono px-3 py-1 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20 text-[#F59E0B]">
@@ -307,10 +479,11 @@ export default function HomePage() {
                 </div>
 
                 {result.missingProtections && result.missingProtections.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {result.missingProtections.map((protection, idx) => (
                       <MissingProtectionCard
-                        key={idx}
+                        key={`protection-${idx}`}
+                        id={`protection-${idx}`}
                         protection={protection}
                         index={idx}
                       />
@@ -318,14 +491,17 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="p-6 rounded-2xl bg-[#101319] border border-white/10 text-center text-xs text-[#ABB5C5]">
-                    No critical missing protections were identified for this document type.
+                    No standard protections were flagged as missing in this text excerpt.
                   </div>
                 )}
               </section>
 
               {/* Section D: Negotiation Email */}
               {result.negotiationEmail && (
-                <NegotiationEmailCard email={result.negotiationEmail} />
+                <NegotiationEmailCard
+                  email={result.negotiationEmail}
+                  userName={user?.displayName}
+                />
               )}
 
               {/* Section E: Review Another Document CTA */}

@@ -14,23 +14,23 @@ export function RiskOverview({ result }: RiskOverviewProps) {
     switch (overallRisk) {
       case "High":
         return {
-          pill: "bg-[#D2F54B]/15 text-[#D2F54B] border-[#D2F54B]/30",
-          barColor: "#D2F54B",
+          pill: "bg-red-500/15 text-red-300 border-red-500/30",
+          barColor: "#EF4444",
           title: "High Risk Document",
           label: "Significant concerning terms identified",
         };
       case "Medium":
         return {
-          pill: "bg-[#6CA8FF]/15 text-[#6CA8FF] border-[#6CA8FF]/30",
-          barColor: "#6CA8FF",
+          pill: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+          barColor: "#F59E0B",
           title: "Moderate Risk Document",
           label: "Revisions recommended before signing",
         };
       case "Low":
       default:
         return {
-          pill: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-          barColor: "#10B981",
+          pill: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+          barColor: "#6CA8FF",
           title: "Low Risk Document",
           label: "Generally balanced standard terms",
         };

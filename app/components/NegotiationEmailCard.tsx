@@ -1,16 +1,35 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { NegotiationEmail } from "./types";
 
 interface NegotiationEmailCardProps {
   email: NegotiationEmail;
+  userName?: string | null;
 }
 
-export function NegotiationEmailCard({ email }: NegotiationEmailCardProps) {
+export function NegotiationEmailCard({
+  email,
+  userName,
+}: NegotiationEmailCardProps) {
   const [copied, setCopied] = useState(false);
 
-  const fullText = `Subject: ${email.subject}\n\n${email.body}`;
+  // Automatically personalize email with signed-in user name
+  const formattedBody = useMemo(() => {
+    if (!userName || !userName.trim()) return email.body;
+    const name = userName.trim();
+    let text = email.body;
+    if (/\[Your Name\]/i.test(text)) {
+      text = text.replace(/\[Your Name\]/gi, name);
+    } else if (/\[Name\]/i.test(text)) {
+      text = text.replace(/\[Name\]/gi, name);
+    } else if (!text.toLowerCase().includes(name.toLowerCase())) {
+      text = `${text}\n\nBest regards,\n${name}`;
+    }
+    return text;
+  }, [email.body, userName]);
+
+  const fullText = `Subject: ${email.subject}\n\n${formattedBody}`;
 
   const handleCopyEmail = async () => {
     try {
@@ -25,7 +44,7 @@ export function NegotiationEmailCard({ email }: NegotiationEmailCardProps) {
 
   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(
     email.subject
-  )}&body=${encodeURIComponent(email.body)}`;
+  )}&body=${encodeURIComponent(formattedBody)}`;
 
   return (
     <section className="p-6 sm:p-8 rounded-2xl bg-[#101319] border border-white/[0.08] space-y-6">
@@ -107,7 +126,7 @@ export function NegotiationEmailCard({ email }: NegotiationEmailCardProps) {
           Email Body
         </label>
         <div className="p-4 sm:p-5 rounded-xl bg-[#07090D] border border-white/5 text-xs sm:text-sm text-[#ABB5C5] whitespace-pre-wrap leading-relaxed select-all">
-          {email.body}
+          {formattedBody}
         </div>
       </div>
     </section>

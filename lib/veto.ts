@@ -9,6 +9,41 @@
 export type RiskLevel = "Low" | "Medium" | "High";
 
 /**
+ * Normalized severity tiers for consistent UI indicators, sorting, and filtering.
+ */
+export type NormalizedSeverity = "High" | "Medium" | "Low" | "Unrated";
+
+/**
+ * Normalizes any raw risk string into standard severity tiers.
+ * Missing, undefined, or unrecognized values return "Unrated" without silently coercing to Low.
+ */
+export function getNormalizedSeverity(risk: unknown): NormalizedSeverity {
+  if (typeof risk !== "string") return "Unrated";
+  const r = risk.trim().toLowerCase();
+  if (r === "high") return "High";
+  if (r === "medium" || r === "moderate") return "Medium";
+  if (r === "low") return "Low";
+  return "Unrated";
+}
+
+/**
+ * Returns numeric priority rank for sorting: High (1) -> Medium (2) -> Low (3) -> Unrated (4).
+ */
+export function getSeverityRank(s: NormalizedSeverity): number {
+  switch (s) {
+    case "High":
+      return 1;
+    case "Medium":
+      return 2;
+    case "Low":
+      return 3;
+    case "Unrated":
+    default:
+      return 4;
+  }
+}
+
+/**
  * A flagged clause containing a direct quote, danger explanation, and pushback line.
  */
 export interface FlaggedClause {

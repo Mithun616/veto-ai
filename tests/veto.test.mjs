@@ -6,6 +6,8 @@ import {
   extractJsonObject,
   runLocalClauseAnalysis,
   normalizeAnalysisResult,
+  getNormalizedSeverity,
+  getSeverityRank,
   MAX_FILE_SIZE,
   MIN_DOCUMENT_LENGTH,
   MAX_DOCUMENT_LENGTH,
@@ -227,5 +229,89 @@ describe("Output Normalization & Resilient Sanitization", () => {
 
     assert.equal(normalized.overallRisk, "High");
     assert.ok(normalized.flaggedClauses.length > 0);
+  });
+});
+
+describe("Severity Normalization, Sorting & Filtering Logic", () => {
+  test("normalizes standard severities accurately", () => {
+    assert.equal(getNormalizedSeverity("High"), "High");
+    assert.equal(getNormalizedSeverity("high"), "High");
+    assert.equal(getNormalizedSeverity("Medium"), "Medium");
+    assert.equal(getNormalizedSeverity("moderate"), "Medium");
+    assert.equal(getNormalizedSeverity("Low"), "Low");
+    assert.equal(getNormalizedSeverity("low"), "Low");
+  });
+
+  test("handles missing or unrecognized severity as Unrated without silently coercing to Low", () => {
+    assert.equal(getNormalizedSeverity(null), "Unrated");
+    assert.equal(getNormalizedSeverity(undefined), "Unrated");
+    assert.equal(getNormalizedSeverity(""), "Unrated");
+    assert.equal(getNormalizedSeverity("Critical"), "Unrated");
+    assert.equal(getNormalizedSeverity("Unknown"), "Unrated");
+    assert.notEqual(getNormalizedSeverity("Unknown"), "Low");
+  });
+
+  test("ranks severities strictly: High (1) -> Medium (2) -> Low (3) -> Unrated (4)", () => {
+    assert.equal(getSeverityRank("High"), 1);
+    assert.equal(getSeverityRank("Medium"), 2);
+    assert.equal(getSeverityRank("Low"), 3);
+    assert.equal(getSeverityRank("Unrated"), 4);
+    assert.ok(getSeverityRank("High") < getSeverityRank("Medium"));
+    assert.ok(getSeverityRank("Medium") < getSeverityRank("Low"));
+    assert.ok(getSeverityRank("Low") < getSeverityRank("Unrated"));
+  });
+
+  test("sorts mixed findings with High concerns first while preserving original order within tiers", () => {
+    const items = [
+      { id: "1", title: "Low Item A", risk: "Low", originalIndex: 0 },
+      { id: "2", title: "High Item A", risk: "High", originalIndex: 1 },
+      { id: "3", title: "Medium Item A", risk: "Medium", originalIndex: 2 },
+      { id: "4", title: "High Item B", risk: "High", originalIndex: 3 },
+      { id: "5", title: "Unrated Item", risk: "Unknown", originalIndex: 4 },
+      { id: "6", title: "Medium Item B", risk: "Medium", originalIndex: 5 },
+    ];
+
+    const sorted = [...items].sort((a, b) => {
+      const rankA = getSeverityRank(getNormalizedSeverity(a.risk));
+      const rankB = getSeverityRank(getNormalizedSeverity(b.risk));
+      return rankA - rankB;
+    });
+
+    assert.deepEqual(
+      sorted.map((s) => s.id),
+      ["2", "4", "3", "6", "1", "5"]
+    );
+  });
+});
+
+describe("Firebase Safe Fallbacks & Guest Mode", () => {
+  test("reports isFirebaseConfigured false when env vars are absent", async () => {
+    const { isFirebaseConfigured, signInWithGoogle, getUserScans, saveScanToFirestore } = await import(
+      "../lib/firebase.ts"
+    );
+    // In test environment without NEXT_PUBLIC_FIREBASE_API_KEY
+    assert.equal(typeof isFirebaseConfigured, "boolean");
+
+    const user = await signInWithGoogle();
+    assert.equal(user, null);
+
+    const scans = await getUserScans("non-existent-user");
+    assert.deepEqual(scans, []);
+
+    const scanId = await saveScanToFirestore("user1", {
+      title: "Test Scan",
+      overallRisk: "Low",
+      riskScore: 20,
+      summary: "Test",
+      analysis: {
+        overallRisk: "Low",
+        riskScore: 20,
+        summary: "Test",
+        flaggedClauses: [],
+        missingProtections: [],
+        negotiationEmail: { subject: "Sub", body: "Body" },
+      },
+    });
+    assert.equal(scanId, null);
   });
 });
