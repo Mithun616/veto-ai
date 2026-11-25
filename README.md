@@ -10,9 +10,7 @@ VetoAI helps students, freshers, renters, and everyday consumers review offers, 
 
 ## Live Demo
 
-The public deployment URL will be added here after production deployment and verification.
-
-For local development, open `http://localhost:3000` after starting the application.
+https://veto-ai-three.vercel.app/
 
 ## Problem and Target Users
 
