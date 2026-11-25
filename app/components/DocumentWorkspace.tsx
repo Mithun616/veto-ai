@@ -18,6 +18,7 @@ interface DocumentWorkspaceProps {
   error: string | null;
   isStale: boolean;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  user?: { displayName?: string | null; email?: string | null } | null;
 }
 
 export function DocumentWorkspace({
@@ -35,6 +36,7 @@ export function DocumentWorkspace({
   error,
   isStale,
   textareaRef,
+  user,
 }: DocumentWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -211,11 +213,20 @@ export function DocumentWorkspace({
       ) : (
         <div className="space-y-4">
           <div
+            role="button"
+            tabIndex={0}
+            aria-label="Upload document file area. Click or press Enter to browse (.pdf, .docx, or .txt up to 4 MB)"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
+            className={`border-2 border-dashed rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6CA8FF] ${
               isDragging
                 ? "border-[#6CA8FF] bg-[#6CA8FF]/5"
                 : "border-white/10 bg-[#07090D]/50 hover:border-white/20 hover:bg-[#07090D]"
@@ -223,6 +234,8 @@ export function DocumentWorkspace({
           >
             <input
               type="file"
+              id="file-upload-input"
+              aria-label="Document file upload (.pdf, .docx, or .txt)"
               ref={fileInputRef}
               onChange={handleFileChange}
               accept=".pdf,.docx,.txt"
@@ -346,10 +359,22 @@ export function DocumentWorkspace({
           )}
         </button>
 
-        {/* Accurate Privacy Notice */}
-        <p className="text-center text-xs text-[#738094] leading-relaxed">
-          Remove sensitive personal details before submitting. Document text is sent to our AI provider for analysis.
-        </p>
+        {/* Signed-in / Guest Privacy Disclosure */}
+        {user ? (
+          <div className="p-3.5 rounded-xl bg-[#161B23]/70 border border-white/10 text-xs text-[#738094] space-y-1">
+            <div className="flex items-center gap-2 text-white/90 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>Signed in as {user.displayName || user.email || "Account"}</span>
+            </div>
+            <p className="leading-relaxed">
+              When you run an audit, a summary record containing flagged clause excerpts, risk scores, and the generated negotiation draft is saved to your private Firestore scan history so you can reload it anytime. Full document text and raw files are never stored in history.
+            </p>
+          </div>
+        ) : (
+          <p className="text-center text-xs text-[#738094] leading-relaxed">
+            Guest mode: In-memory audit only. Remove sensitive personal details before submitting. Document text is processed in-memory and sent over TLS to our AI provider for inference without server-side retention.
+          </p>
+        )}
       </div>
     </section>
   );

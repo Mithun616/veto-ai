@@ -276,24 +276,37 @@ export default function HomePage() {
       setUserToggledIds({});
       setIsStale(false);
 
-      // If signed in, automatically persist to Firestore scan history
+      // If signed in, automatically persist to Firestore scan history (non-blocking)
       if (user) {
         const snippet =
           documentText.slice(0, 45).trim() ||
           selectedFile?.name ||
           "Contract Audit";
-        saveScanToFirestore(user.uid, {
-          title: snippet,
-          overallRisk: data.overallRisk,
-          riskScore: data.riskScore,
-          summary: data.summary,
-          analysis: data as AnalysisResult,
-        })
-          .then(async () => {
-            const updated = await getUserScans(user.uid);
-            setSavedScans(updated);
+        saveScanToFirestore(
+          user.uid,
+          {
+            title: snippet,
+            overallRisk: data.overallRisk,
+            riskScore: data.riskScore,
+            summary: data.summary,
+            analysis: data as AnalysisResult,
+          },
+          (refreshedScans) => {
+            // Refresh scans state immediately via callback
+            setSavedScans(refreshedScans);
+          }
+        )
+          .then(async (docId) => {
+            // Also refresh immediately on promise resolution
+            if (docId) {
+              const updated = await getUserScans(user.uid);
+              setSavedScans(updated);
+            }
           })
-          .catch((err) => console.warn("[VetoAI] Failed to save scan:", err));
+          .catch((err) => {
+            // Non-blocking: Firestore logging failures never discard or disrupt the on-screen analysis
+            console.warn("[VetoAI] Non-blocking scan history save failed:", err);
+          });
       }
 
       // Smooth scroll to results
@@ -383,6 +396,7 @@ export default function HomePage() {
               error={error}
               isStale={isStale}
               textareaRef={textareaRef}
+              user={user}
             />
           </div>
 

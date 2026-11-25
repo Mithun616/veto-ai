@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny: All collections and paths are closed by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper: Verify user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Verify user is the resource owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper: Validate server timestamp
+    function isValidTimestamp(val) {
+      return val is timestamp || val == request.time;
+    }
+
+    // Helper: Validate negotiation email shape
+    function isValidNegotiationEmail(email) {
+      return email is map
+        && email.keys().hasAll(['subject', 'body'])
+        && email.keys().hasOnly(['subject', 'body'])
+        && email.subject is string && email.subject.size() <= 200
+        && email.body is string && email.body.size() <= 5000;
+    }
+
+    // Helper: Validate nested analysis shape (strictly rejects arbitrary keys & document snapshots)
+    function isValidAnalysis(analysis) {
+      return analysis is map
+        && analysis.keys().hasAll([
+          'overallRisk', 'riskScore', 'summary', 'reviewStatus',
+          'unverifiedCount', 'hasSupportedFindings', 'flaggedClauses',
+          'missingProtections', 'negotiationEmail'
+        ])
+        && analysis.keys().hasOnly([
+          'overallRisk', 'riskScore', 'summary', 'reviewStatus',
+          'unverifiedCount', 'hasSupportedFindings', 'flaggedClauses',
+          'missingProtections', 'negotiationEmail'
+        ])
+        && analysis.overallRisk in ['Low', 'Medium', 'High']
+        && analysis.riskScore is number && analysis.riskScore >= 0 && analysis.riskScore <= 100
+        && analysis.summary is string && analysis.summary.size() <= 2000
+        && analysis.reviewStatus in ['complete', 'incomplete_unverified', 'clean']
+        && analysis.unverifiedCount is number && analysis.unverifiedCount >= 0
+        && analysis.hasSupportedFindings is bool
+        && analysis.flaggedClauses is list && analysis.flaggedClauses.size() <= 50
+        && analysis.missingProtections is list && analysis.missingProtections.size() <= 20
+        && isValidNegotiationEmail(analysis.negotiationEmail);
+    }
+
+    // Helper: Validate complete scan document payload
+    function isValidScanPayload() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['title', 'overallRisk', 'riskScore', 'summary', 'analysis', 'clientTimestamp'])
+        && data.keys().hasOnly(['title', 'overallRisk', 'riskScore', 'summary', 'analysis', 'clientTimestamp', 'createdAt'])
+        && data.title is string && data.title.size() <= 100
+        && data.overallRisk in ['Low', 'Medium', 'High']
+        && data.riskScore is number && data.riskScore >= 0 && data.riskScore <= 100
+        && data.summary is string && data.summary.size() <= 2000
+        && data.clientTimestamp is string && data.clientTimestamp.size() <= 40
+        && (!('createdAt' in data) || isValidTimestamp(data.createdAt))
+        && isValidAnalysis(data.analysis);
+    }
+
+    // User Scan History: users/{userId}/scans/{scanId}
+    match /users/{userId}/scans/{scanId} {
+      // Authorization: Users can ONLY read scans belonging to their authenticated UID
+      allow read: if isOwner(userId);
+
+      // Creation: Authenticated owner only, with strict schema, allowlisted keys, and nested shape validation
+      allow create: if isOwner(userId) && isValidScanPayload();
+
+      // Deletion: Users can delete their own past scans
+      allow delete: if isOwner(userId);
+
+      // Immutability: Prevent in-place modifications to preserve history integrity
+      allow update: if false;
+    }
+  }
+}

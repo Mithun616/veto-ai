@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --no-warnings --experimental-strip-types --test tests/veto.test.mjs"
+    "test": "node --no-warnings --experimental-strip-types --test tests/veto.test.mjs tests/firestore-rules-logic.test.mjs tests/firestore-rules.emulator.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^3.6.1",
@@ -19,6 +19,7 @@
     "unpdf": "^2.2.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -27,5 +28,8 @@
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.7"
   }
 }

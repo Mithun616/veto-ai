@@ -10,27 +10,77 @@ interface RiskOverviewProps {
 export function RiskOverview({ result }: RiskOverviewProps) {
   const { overallRisk, riskScore, summary, flaggedClauses, missingProtections } = result;
 
+  const isIncompleteUnverified = Boolean(
+    result.reviewStatus === "incomplete_unverified" ||
+      (result.unverifiedCount &&
+        result.unverifiedCount > 0 &&
+        (!flaggedClauses || flaggedClauses.length === 0))
+  );
+
+  const isPartialVerified = Boolean(
+    result.unverifiedCount &&
+      result.unverifiedCount > 0 &&
+      flaggedClauses &&
+      flaggedClauses.length > 0
+  );
+
+  const isClean = Boolean(
+    result.reviewStatus === "clean" ||
+      ((!flaggedClauses || flaggedClauses.length === 0) &&
+        (!result.unverifiedCount || result.unverifiedCount === 0))
+  );
+
   const getRiskMeta = () => {
+    if (isIncompleteUnverified) {
+      return {
+        pill: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+        barColor: "#F59E0B",
+        badge: `AI Review Indicator: Incomplete Assessment (${result.unverifiedCount} Unverified Omitted)`,
+        title: "Incomplete Review — Verification Required",
+        label:
+          "Candidate findings could not be confirmed against the supplied text. This is NOT a clean bill of health.",
+      };
+    }
+    if (isClean) {
+      return {
+        pill: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+        barColor: "#6CA8FF",
+        badge: `AI Review Indicator: Clean Text (${riskScore} / 100)`,
+        title: "Clean Review — No Flagged Concerns",
+        label: "No significant concerning terms identified in the analyzed text",
+      };
+    }
     switch (overallRisk) {
       case "High":
         return {
           pill: "bg-red-500/15 text-red-300 border-red-500/30",
           barColor: "#EF4444",
+          badge: `AI Review Indicator: High Risk (${riskScore} / 100)${
+            isPartialVerified ? " — Partial Review" : ""
+          }`,
           title: "High Risk Document",
-          label: "Significant concerning terms identified",
+          label: isPartialVerified
+            ? "Significant verified terms identified (partial review—some unverified items omitted)"
+            : "Significant concerning terms identified in the supplied text",
         };
       case "Medium":
         return {
           pill: "bg-amber-500/15 text-amber-300 border-amber-500/30",
           barColor: "#F59E0B",
+          badge: `AI Review Indicator: Moderate Risk (${riskScore} / 100)${
+            isPartialVerified ? " — Partial Review" : ""
+          }`,
           title: "Moderate Risk Document",
-          label: "Revisions recommended before signing",
+          label: isPartialVerified
+            ? "Revisions recommended (partial review—some unverified items omitted)"
+            : "Revisions recommended before signing",
         };
       case "Low":
       default:
         return {
           pill: "bg-blue-500/15 text-blue-300 border-blue-500/30",
           barColor: "#6CA8FF",
+          badge: `AI Review Indicator: Low Risk (${riskScore} / 100)`,
           title: "Low Risk Document",
           label: "Generally balanced standard terms",
         };
@@ -52,7 +102,7 @@ export function RiskOverview({ result }: RiskOverviewProps) {
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: meta.barColor }}
               />
-              AI Review Indicator: {overallRisk} Risk ({riskScore} / 100)
+              {meta.badge}
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-[#F5F7FA]">
@@ -104,6 +154,11 @@ export function RiskOverview({ result }: RiskOverviewProps) {
           </svg>
           <div>
             <strong>Incomplete Review Notice:</strong> {result.unverifiedCount} candidate finding(s) returned by the AI model could not be verified verbatim against your submitted document text and were excluded from this report and the negotiation email to preserve review integrity.
+            {isIncompleteUnverified && (
+              <span className="block mt-1 font-semibold text-[#F59E0B]/90">
+                Because 0 findings could be verified from this excerpt, this document cannot be rated as safe or low risk. Please provide the full contract text or complete clauses and retry.
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -115,10 +170,14 @@ export function RiskOverview({ result }: RiskOverviewProps) {
           className="p-4 rounded-xl bg-[#161B23] border border-white/10 text-center space-y-2"
         >
           <div className="text-sm font-medium text-[#F5F7FA]">
-            No verified clause risks were confirmed in the supplied text.
+            {isIncompleteUnverified
+              ? "No verified clause risks could be confirmed from this excerpt."
+              : "Clean Review: No concerning clauses identified in the analyzed text."}
           </div>
           <p className="text-xs text-[#ABB5C5]">
-            If you provided a partial excerpt or want a deeper review of other sections, ensure the full text is provided and re-run the analysis.
+            {isIncompleteUnverified
+              ? "Candidate findings were dropped due to quote mismatches. Please submit the complete clause or full contract text to perform an accurate review."
+              : "If you pasted an excerpt, you may review additional sections of your agreement at any time."}
           </p>
         </div>
       )}

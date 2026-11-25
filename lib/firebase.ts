@@ -1,9 +1,12 @@
 /**
- * @fileoverview Safe Firebase initialization and client helper methods for
- * optional Google Sign-In and Firestore scan history.
+ * @fileoverview Safe Firebase initialization, client helper methods, and strict
+ * allowlist serialization for optional Google Sign-In and Firestore scan history.
  *
- * Designed to never crash or throw during SSR, production build, or guest browsing
- * when NEXT_PUBLIC_FIREBASE_API_KEY is not configured.
+ * Security & Privacy Guarantees:
+ * 1. Raw document text, files, and transient UI fields are strictly excluded from persistence.
+ * 2. `serializePersistedScan` enforces a strict allowlist of validated analysis fields.
+ * 3. Never crashes or throws during SSR, production build, or guest browsing when
+ *    NEXT_PUBLIC_FIREBASE_API_KEY is not configured.
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
@@ -27,6 +30,64 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import type { AnalysisResult } from "@/lib/veto";
+
+/**
+ * Persisted shape of a flagged clause in Firestore.
+ */
+export interface PersistedFlaggedClause {
+  id: string;
+  title: string;
+  quote: string;
+  risk: "Low" | "Medium" | "High";
+  whyItMatters: string;
+  negotiationLine: string;
+}
+
+/**
+ * Persisted shape of a missing protection in Firestore.
+ */
+export interface PersistedMissingProtection {
+  id: string;
+  title: string;
+  whyItMatters: string;
+  askFor: string;
+}
+
+/**
+ * Persisted shape of the negotiation draft email.
+ */
+export interface PersistedNegotiationEmail {
+  subject: string;
+  body: string;
+}
+
+/**
+ * Persisted shape of the nested analysis object.
+ * Strictly excludes documentSnapshot, raw document text, and transient UI state.
+ */
+export interface PersistedAnalysis {
+  overallRisk: "Low" | "Medium" | "High";
+  riskScore: number;
+  summary: string;
+  reviewStatus: "complete" | "incomplete_unverified" | "clean";
+  unverifiedCount: number;
+  hasSupportedFindings: boolean;
+  flaggedClauses: PersistedFlaggedClause[];
+  missingProtections: PersistedMissingProtection[];
+  negotiationEmail: PersistedNegotiationEmail;
+}
+
+/**
+ * Complete document payload written to `users/{userId}/scans`.
+ */
+export interface PersistedScanPayload {
+  title: string;
+  overallRisk: "Low" | "Medium" | "High";
+  riskScore: number;
+  summary: string;
+  analysis: PersistedAnalysis;
+  clientTimestamp: string;
+}
 
 export interface SavedScan {
   id: string;
@@ -72,6 +133,100 @@ if (typeof window !== "undefined" && isFirebaseConfigured) {
 }
 
 export { app, auth, db, googleProvider };
+
+/**
+ * Strict allowlist serialization for Firestore persistence.
+ * Guarantees that raw document text, document snapshots, or unauthorized
+ * fields are never stored in Cloud Firestore.
+ */
+export function serializePersistedScan(scanData: {
+  title: string;
+  overallRisk: "Low" | "Medium" | "High";
+  riskScore: number;
+  summary: string;
+  analysis: AnalysisResult;
+}): PersistedScanPayload {
+  const safeTitle = String(scanData.title || "Contract Audit")
+    .slice(0, 100)
+    .trim();
+
+  const safeOverallRisk: "Low" | "Medium" | "High" =
+    scanData.overallRisk === "High" || scanData.overallRisk === "Low"
+      ? scanData.overallRisk
+      : "Medium";
+
+  const safeRiskScore =
+    typeof scanData.riskScore === "number" && !isNaN(scanData.riskScore)
+      ? Math.max(0, Math.min(100, Math.round(scanData.riskScore)))
+      : 50;
+
+  const safeSummary = String(scanData.summary || "").slice(0, 2000).trim();
+
+  const rawClauses = Array.isArray(scanData.analysis?.flaggedClauses)
+    ? scanData.analysis.flaggedClauses
+    : [];
+
+  const safeFlaggedClauses: PersistedFlaggedClause[] = rawClauses
+    .slice(0, 50)
+    .map((c, idx) => ({
+      id: String(c.id || `clause-${idx + 1}`).slice(0, 50),
+      title: String(c.title || "Flagged Clause").slice(0, 150),
+      quote: String(c.quote || "").slice(0, 500),
+      risk: c.risk === "High" || c.risk === "Low" ? c.risk : "Medium",
+      whyItMatters: String(c.whyItMatters || "").slice(0, 1000),
+      negotiationLine: String(c.negotiationLine || "").slice(0, 1000),
+    }));
+
+  const rawProtections = Array.isArray(scanData.analysis?.missingProtections)
+    ? scanData.analysis.missingProtections
+    : [];
+
+  const safeMissingProtections: PersistedMissingProtection[] = rawProtections
+    .slice(0, 20)
+    .map((p, idx) => ({
+      id: String(p.id || `protection-${idx + 1}`).slice(0, 50),
+      title: String(p.title || "Missing Protection").slice(0, 150),
+      whyItMatters: String(p.whyItMatters || "").slice(0, 1000),
+      askFor: String(p.askFor || "").slice(0, 1000),
+    }));
+
+  const safeNegotiationEmail: PersistedNegotiationEmail = {
+    subject: String(
+      scanData.analysis?.negotiationEmail?.subject || "Contract Discussion"
+    ).slice(0, 200),
+    body: String(scanData.analysis?.negotiationEmail?.body || "").slice(0, 5000),
+  };
+
+  const safeAnalysis: PersistedAnalysis = {
+    overallRisk: safeOverallRisk,
+    riskScore: safeRiskScore,
+    summary: safeSummary,
+    reviewStatus:
+      scanData.analysis?.reviewStatus === "incomplete_unverified" ||
+      scanData.analysis?.reviewStatus === "clean"
+        ? scanData.analysis.reviewStatus
+        : "complete",
+    unverifiedCount:
+      typeof scanData.analysis?.unverifiedCount === "number"
+        ? Math.max(0, scanData.analysis.unverifiedCount)
+        : 0,
+    hasSupportedFindings: Boolean(
+      scanData.analysis?.hasSupportedFindings ?? safeFlaggedClauses.length > 0
+    ),
+    flaggedClauses: safeFlaggedClauses,
+    missingProtections: safeMissingProtections,
+    negotiationEmail: safeNegotiationEmail,
+  };
+
+  return {
+    title: safeTitle,
+    overallRisk: safeOverallRisk,
+    riskScore: safeRiskScore,
+    summary: safeSummary,
+    analysis: safeAnalysis,
+    clientTimestamp: new Date().toISOString(),
+  };
+}
 
 /**
  * Triggers Google Sign-In via popup.
@@ -124,7 +279,10 @@ export function onAuthChange(
 }
 
 /**
- * Saves a completed analysis to Firestore under `users/${userId}/scans`.
+ * Saves an allowlist-serialized analysis to Firestore under `users/${userId}/scans`.
+ * Full document text and raw files are NEVER stored.
+ * Sanitizes payload with JSON.parse(JSON.stringify(...)) so undefined optional fields
+ * never trigger Firestore unhandled rejections.
  * Returns the created document ID or null on failure.
  */
 export async function saveScanToFirestore(
@@ -135,19 +293,33 @@ export async function saveScanToFirestore(
     riskScore: number;
     summary: string;
     analysis: AnalysisResult;
-  }
+  },
+  onScansUpdated?: (scans: SavedScan[]) => void
 ): Promise<string | null> {
   if (!isFirebaseConfigured || !db || !userId) {
     return null;
   }
 
   try {
+    const payload = serializePersistedScan(scanData);
+    // Sanitize with JSON.parse(JSON.stringify(...)) so undefined optional fields never get rejected by Firestore
+    const sanitized = JSON.parse(JSON.stringify(payload));
     const scansRef = collection(db, "users", userId, "scans");
     const docRef = await addDoc(scansRef, {
-      ...scanData,
+      ...sanitized,
       createdAt: serverTimestamp(),
-      clientTimestamp: new Date().toISOString(),
     });
+
+    // Refresh scans state immediately after saving if callback provided
+    if (onScansUpdated) {
+      try {
+        const refreshed = await getUserScans(userId);
+        onScansUpdated(refreshed);
+      } catch (refreshErr) {
+        console.warn("[VetoAI] Failed to refresh scans after saving:", refreshErr);
+      }
+    }
+
     return docRef.id;
   } catch (err) {
     console.warn("[VetoAI] Failed to save scan to Firestore:", err);
@@ -178,6 +350,57 @@ export async function getUserScans(userId: string): Promise<SavedScan[]> {
         dateStr = String(data.clientTimestamp);
       }
 
+      const rawAnalysis = (data.analysis || {}) as Partial<PersistedAnalysis>;
+
+      const safeAnalysis: AnalysisResult = {
+        overallRisk:
+          rawAnalysis.overallRisk === "High" || rawAnalysis.overallRisk === "Low"
+            ? rawAnalysis.overallRisk
+            : "Medium",
+        riskScore:
+          typeof rawAnalysis.riskScore === "number" ? rawAnalysis.riskScore : 50,
+        summary: String(rawAnalysis.summary || ""),
+        reviewStatus:
+          rawAnalysis.reviewStatus === "incomplete_unverified" ||
+          rawAnalysis.reviewStatus === "clean"
+            ? rawAnalysis.reviewStatus
+            : "complete",
+        unverifiedCount:
+          typeof rawAnalysis.unverifiedCount === "number"
+            ? rawAnalysis.unverifiedCount
+            : 0,
+        hasSupportedFindings: Boolean(
+          rawAnalysis.hasSupportedFindings ??
+            (Array.isArray(rawAnalysis.flaggedClauses) &&
+              rawAnalysis.flaggedClauses.length > 0)
+        ),
+        flaggedClauses: Array.isArray(rawAnalysis.flaggedClauses)
+          ? rawAnalysis.flaggedClauses.map((c) => ({
+              id: String(c.id || ""),
+              title: String(c.title || ""),
+              quote: String(c.quote || ""),
+              risk:
+                c.risk === "High" || c.risk === "Low"
+                  ? (c.risk as "Low" | "Medium" | "High")
+                  : "Medium",
+              whyItMatters: String(c.whyItMatters || ""),
+              negotiationLine: String(c.negotiationLine || ""),
+            }))
+          : [],
+        missingProtections: Array.isArray(rawAnalysis.missingProtections)
+          ? rawAnalysis.missingProtections.map((p) => ({
+              id: String(p.id || ""),
+              title: String(p.title || ""),
+              whyItMatters: String(p.whyItMatters || ""),
+              askFor: String(p.askFor || ""),
+            }))
+          : [],
+        negotiationEmail: {
+          subject: String(rawAnalysis.negotiationEmail?.subject || "Contract Discussion"),
+          body: String(rawAnalysis.negotiationEmail?.body || ""),
+        },
+      };
+
       scans.push({
         id: doc.id,
         title: String(data.title || "Contract Audit"),
@@ -185,7 +408,7 @@ export async function getUserScans(userId: string): Promise<SavedScan[]> {
         overallRisk: (data.overallRisk as "Low" | "Medium" | "High") || "Medium",
         riskScore: typeof data.riskScore === "number" ? data.riskScore : 50,
         summary: String(data.summary || ""),
-        analysis: data.analysis as AnalysisResult,
+        analysis: safeAnalysis,
       });
     });
 
