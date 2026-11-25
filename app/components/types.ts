@@ -1,31 +1,13 @@
-export type RiskLevel = "Low" | "Medium" | "High";
+/**
+ * @fileoverview Re-export shared types from core lib for frontend UI components.
+ */
 
-export interface FlaggedClause {
-  title: string;
-  quote: string;
-  risk: RiskLevel;
-  whyItMatters: string;
-  negotiationLine: string;
-}
-
-export interface MissingProtection {
-  title: string;
-  whyItMatters: string;
-  askFor: string;
-}
-
-export interface NegotiationEmail {
-  subject: string;
-  body: string;
-}
-
-export interface AnalysisResult {
-  overallRisk: RiskLevel;
-  riskScore: number;
-  summary: string;
-  flaggedClauses: FlaggedClause[];
-  missingProtections: MissingProtection[];
-  negotiationEmail: NegotiationEmail;
-}
+export type {
+  RiskLevel,
+  FlaggedClause,
+  MissingProtection,
+  NegotiationEmail,
+  AnalysisResult,
+} from "@/lib/veto";
 
 export type InputTab = "paste" | "upload";

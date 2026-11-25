@@ -34,6 +34,7 @@ export function Hero({ onReviewClick, onTrySampleClick }: HeroProps) {
               <button
                 type="button"
                 onClick={onReviewClick}
+                aria-label="Scroll to workspace to review a document"
                 className="px-6 py-3 rounded-xl bg-[#D2F54B] text-[#07090D] font-semibold text-sm hover:bg-[#bde038] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2F54B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#07090D] shadow-sm flex items-center gap-2 min-h-[44px]"
               >
                 <span>Review a document</span>
@@ -55,6 +56,7 @@ export function Hero({ onReviewClick, onTrySampleClick }: HeroProps) {
               <button
                 type="button"
                 onClick={onTrySampleClick}
+                aria-label="Load sample internship offer letter into review tool"
                 className="px-5 py-3 rounded-xl bg-[#101319] hover:bg-[#161B23] text-[#F5F7FA] font-medium text-sm border border-white/10 hover:border-white/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6CA8FF] min-h-[44px]"
               >
                 Try a sample

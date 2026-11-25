@@ -216,7 +216,14 @@ export default function HomePage() {
 
           {/* Results Dashboard */}
           {result && (
-            <div ref={resultsRef} className="space-y-10 pt-4 animate-fade-in">
+            <div
+              ref={resultsRef}
+              className="space-y-10 pt-4 animate-fade-in"
+              id="results-section"
+              role="region"
+              aria-live="polite"
+              aria-label="Document audit results"
+            >
               {/* Stale warning if document was changed after analysis */}
               {isStale && (
                 <div
@@ -224,7 +231,14 @@ export default function HomePage() {
                   className="p-4 rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 flex items-center justify-between gap-4 text-xs sm:text-sm text-[#F59E0B]"
                 >
                   <div className="flex items-center gap-2.5">
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      className="w-4 h-4 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-hidden="true"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="8" x2="12" y2="12" />
                       <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -236,6 +250,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={handleSubmit}
+                    aria-label="Re-analyze modified document text"
                     className="px-3 py-1.5 rounded-lg bg-[#F59E0B] text-[#07090D] font-semibold text-xs hover:bg-[#e08f0a] transition-colors shrink-0"
                   >
                     Refresh Review
@@ -318,9 +333,17 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={handleScrollToWorkspace}
+                  aria-label="Scroll to workspace to review another document"
                   className="px-6 py-3 rounded-xl bg-[#161B23] hover:bg-[#1f2633] text-[#F5F7FA] font-medium text-sm border border-white/10 transition-colors inline-flex items-center gap-2 min-h-[44px]"
                 >
-                  <svg className="w-4 h-4 text-[#6CA8FF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="w-4 h-4 text-[#6CA8FF]"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-hidden="true"
+                  >
                     <line x1="12" y1="19" x2="12" y2="5" />
                     <polyline points="5 12 12 5 19 12" />
                   </svg>

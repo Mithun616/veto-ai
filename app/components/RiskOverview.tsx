@@ -92,7 +92,14 @@ export function RiskOverview({ result }: RiskOverviewProps) {
             {riskScore} <span className="text-[#738094]">/ 100</span>
           </span>
         </div>
-        <div className="w-full h-2.5 bg-[#07090D] rounded-full overflow-hidden border border-white/5 p-0.5">
+        <div
+          role="meter"
+          aria-valuenow={riskScore}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Overall document risk score: ${riskScore} out of 100, classified as ${overallRisk} Risk`}
+          className="w-full h-2.5 bg-[#07090D] rounded-full overflow-hidden border border-white/5 p-0.5"
+        >
           <div
             className="h-full rounded-full transition-all duration-700 ease-out"
             style={{

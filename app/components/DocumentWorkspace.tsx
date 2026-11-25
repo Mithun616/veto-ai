@@ -82,9 +82,16 @@ export function DocumentWorkspace({
       {/* Workspace Top Bar: Mode Switcher & Reset */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-4">
         {/* Tab switch */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#07090D] border border-white/5 w-fit">
+        <div
+          role="tablist"
+          aria-label="Input method selection"
+          className="flex items-center gap-1.5 p-1 rounded-xl bg-[#07090D] border border-white/5 w-fit"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === "paste"}
+            aria-label="Paste text input mode"
             onClick={() => onTabChange("paste")}
             className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors min-h-[36px] ${
               activeTab === "paste"
@@ -96,6 +103,9 @@ export function DocumentWorkspace({
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === "upload"}
+            aria-label="Upload document file mode"
             onClick={() => onTabChange("upload")}
             className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors min-h-[36px] ${
               activeTab === "upload"
@@ -115,6 +125,7 @@ export function DocumentWorkspace({
           <button
             type="button"
             onClick={() => onLoadSample("internship")}
+            aria-label="Load sample internship offer letter"
             className="px-2.5 py-1.5 rounded-lg bg-[#161B23] hover:bg-[#1c222c] text-[#ABB5C5] hover:text-[#F5F7FA] text-xs font-medium border border-white/5 transition-colors min-h-[34px]"
           >
             Internship sample
@@ -122,6 +133,7 @@ export function DocumentWorkspace({
           <button
             type="button"
             onClick={() => onLoadSample("rental")}
+            aria-label="Load sample residential rental agreement"
             className="px-2.5 py-1.5 rounded-lg bg-[#161B23] hover:bg-[#1c222c] text-[#ABB5C5] hover:text-[#F5F7FA] text-xs font-medium border border-white/5 transition-colors min-h-[34px]"
           >
             Rental sample
@@ -130,6 +142,7 @@ export function DocumentWorkspace({
             <button
               type="button"
               onClick={onClear}
+              aria-label="Clear document input"
               className="px-2.5 py-1.5 rounded-lg text-xs text-[#738094] hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-1 min-h-[34px]"
               title="Clear input"
             >
@@ -309,6 +322,7 @@ export function DocumentWorkspace({
         <button
           type="button"
           onClick={onSubmit}
+          aria-label={loading ? "Analyzing document, please wait" : "Review document for unfair clauses"}
           disabled={!canScan || loading}
           className={`w-full py-3.5 px-6 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D2F54B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#101319] ${
             !canScan || loading
