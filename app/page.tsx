@@ -60,11 +60,11 @@ const SAMPLE_SAAS = `SAAS & FREELANCE SERVICES MASTER AGREEMENT
 3. Indemnification & Unlimited Liability: Contractor agrees to indemnify, defend, and hold harmless Client against any third-party claims without any monetary cap on liability. Client liability to Contractor is capped at $0.
 4. Non-Solicitation & Non-Compete: Contractor shall not provide development or design services to any company operating in the SaaS sector globally for 18 months following contract completion.`;
 
-const SCAN_STEPS = [
-  "Reading document & extracting clauses...",
-  "Flagging unfair training bonds & liabilities...",
-  "Checking for missing consumer protections...",
-  "Drafting diplomatic negotiation email...",
+const SCAN_TICKER = [
+  "PARSING CLAUSES",
+  "HUNTING EXIT TRAPS",
+  "AUDITING MISSING RIGHTS",
+  "DRAFTING PUSHBACK",
 ];
 
 const DOC_TYPES = [
@@ -116,12 +116,12 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Stepper timer during loading
+  // Stepper timer during loading (cycles through SCAN_TICKER)
   useEffect(() => {
     if (!loading) return;
 
     const interval = setInterval(() => {
-      setActiveStep((prev) => (prev < SCAN_STEPS.length - 1 ? prev + 1 : prev));
+      setActiveStep((prev) => (prev < SCAN_TICKER.length - 1 ? prev + 1 : prev));
     }, 1500);
 
     return () => clearInterval(interval);
@@ -344,15 +344,16 @@ export default function HomePage() {
   const missingOffset = -(highDash + medLowDash);
 
   return (
-    <div className="min-h-screen bg-[#05070C] text-[#F8FAFC] flex flex-col font-sans selection:bg-[#D4FF2A] selection:text-[#05070C] relative">
-      {/* Slow-pulsing ambient glow behind Hero & Command Stage */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[640px] bg-gradient-to-b from-[#2563EB]/20 via-[#60A5FA]/10 to-[#D4FF2A]/5 blur-3xl pointer-events-none -z-10 animate-pulse-glow" />
+    <div className="min-h-screen bg-[#05070C] text-[#F8FAFC] flex flex-col font-sans selection:bg-[#D4FF2A] selection:text-[#05070C] relative bg-grid-architectural overflow-x-hidden">
+      {/* Luminous Ambient Glow Orbs */}
+      <div className="absolute top-12 right-0 w-[650px] h-[650px] bg-gradient-to-bl from-[#2563EB]/25 via-[#60A5FA]/12 to-[#D4FF2A]/8 blur-3xl pointer-events-none -z-10 animate-pulse-glow" />
+      <div className="absolute top-0 left-0 w-[550px] h-[550px] bg-gradient-to-br from-[#2563EB]/15 to-transparent blur-3xl pointer-events-none -z-10" />
 
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 bg-[#05070C]/80 backdrop-blur-2xl border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* VetoAI Shield Mark with subtle hover glow */}
+            {/* VetoAI Shield Mark */}
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#D4FF2A] via-[#60A5FA] to-[#2563EB] p-[1.5px] shadow-lg shadow-[#D4FF2A]/10 hover:shadow-[#D4FF2A]/25 transition-all">
               <div className="w-full h-full bg-[#05070C] rounded-[10px] flex items-center justify-center">
                 <svg
@@ -375,304 +376,385 @@ export default function HomePage() {
 
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-[#D4FF2A]/10 text-[#D4FF2A] border border-[#D4FF2A]/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#D4FF2A] animate-pulse"></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#D4FF2A] animate-pulse" />
               EDUCATIONAL REVIEW • NOT LEGAL ADVICE
             </span>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="pt-14 pb-10 text-center px-4 max-w-4xl mx-auto">
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15] text-[#F8FAFC]">
-          <span className="font-serif italic font-normal text-[#D4FF2A] mr-2">
-            Spot
-          </span>
-          Every <span className="text-[#60A5FA]">Trap</span> Before You Sign.
-        </h1>
-        <p className="mt-4 text-[#CBD5E1] text-base sm:text-lg font-normal tracking-wide max-w-xl mx-auto">
-          Drop any contract. Expose hidden traps. Copy your pushback.
-        </p>
-      </section>
-
-      {/* Main Single Centered Command Stage: max-w-4xl mx-auto */}
-      <main className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-2xl p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-[#60A5FA]/40 hover:shadow-[0_12px_40px_rgba(37,99,235,0.18)] transition-all duration-300 relative">
-          {/* Top Bar: Segmented Tab Switch + Interactive Document Type Dropdown */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-            {/* Segmented Tab Switch */}
-            <div className="inline-flex p-1 rounded-xl bg-[#05070C]/90 border border-white/10 self-start shadow-inner">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("paste");
-                  setError(null);
-                }}
-                className={`px-4 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                  activeTab === "paste"
-                    ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/25"
-                    : "text-[#CBD5E1] hover:text-white"
-                }`}
-              >
-                Paste Clause
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("upload");
-                  setError(null);
-                }}
-                className={`px-4 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                  activeTab === "upload"
-                    ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/25"
-                    : "text-[#CBD5E1] hover:text-white"
-                }`}
-              >
-                Upload PDF / DOCX
-              </button>
+      {/* Asymmetric 2-Column Hero Launchpad */}
+      <section className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-10 sm:pt-14 pb-12 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1.15fr] items-center gap-10 lg:gap-14">
+          {/* Left Column: Editorial Pitch */}
+          <div className="space-y-6 sm:space-y-7">
+            {/* Glowing Pill Badge */}
+            <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold tracking-wider uppercase bg-[#D4FF2A]/10 text-[#D4FF2A] border border-[#D4FF2A]/30 shadow-[0_0_18px_rgba(212,255,42,0.18)]">
+              <span className="w-2 h-2 rounded-full bg-[#D4FF2A] animate-ping" />
+              <span>4-TIER AI X-RAY • ZERO DATA STORED</span>
             </div>
 
-            {/* Custom Interactive Document Type Dropdown */}
-            <div className="flex items-center gap-2" ref={dropdownRef}>
-              <span className="text-slate-500 text-[11px] font-mono uppercase tracking-wider hidden sm:inline">
-                Preset:
+            {/* Oversized Mixed-Font Headline */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.05] text-[#F8FAFC]">
+              <span className="font-serif italic font-normal text-[#D4FF2A] mr-3">
+                Spot
               </span>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setDocTypeOpen((prev) => !prev)}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#05070C]/90 border border-white/10 hover:border-[#60A5FA]/50 text-xs font-mono font-semibold text-[#60A5FA] hover:text-white transition-all flex items-center gap-2 shadow-sm"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA]" />
-                  <span>{docType}</span>
-                  <svg
-                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                      docTypeOpen ? "rotate-180" : ""
-                    }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
+              Every <span className="text-[#60A5FA]">Trap</span> Before You Sign.
+            </h1>
 
-                {docTypeOpen && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-xl bg-[#0A0F1C]/95 backdrop-blur-2xl border border-white/10 p-1.5 shadow-2xl z-30 animate-fade-up">
-                    <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 px-3 py-1.5">
-                      Select Contract Type
-                    </div>
-                    {DOC_TYPES.map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => handleSelectDocType(type)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-mono transition-all flex items-center justify-between ${
-                          docType === type
-                            ? "bg-[#2563EB] text-white font-semibold"
-                            : "text-[#CBD5E1] hover:text-white hover:bg-white/5"
-                        }`}
-                      >
-                        <span>{type}</span>
-                        {docType === type && <span className="text-xs">✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
+            {/* Crisp 1-Line Pitch */}
+            <p className="text-base sm:text-lg text-[#CBD5E1] font-normal leading-relaxed max-w-xl">
+              Drop any offer letter, lease, or terms. Expose hidden traps and copy your pushback in seconds.
+            </p>
+
+            {/* 3-Column Glassy Micro-Metric Strip */}
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="p-3.5 rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-[#D4FF2A]/50 hover:-translate-y-0.5 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                <div className="text-[#60A5FA] text-sm sm:text-base font-bold font-mono">
+                  PDF & DOCX
+                </div>
+                <div className="text-[11px] font-mono text-[#CBD5E1] mt-0.5">
+                  Native Extraction
+                </div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-[#D4FF2A]/50 hover:-translate-y-0.5 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                <div className="text-[#D4FF2A] text-sm sm:text-base font-bold font-mono">
+                  Missing Rights
+                </div>
+                <div className="text-[11px] font-mono text-[#CBD5E1] mt-0.5">
+                  Omission Check
+                </div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-[#D4FF2A]/50 hover:-translate-y-0.5 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                <div className="text-white text-sm sm:text-base font-bold font-mono">
+                  1-Click Gmail
+                </div>
+                <div className="text-[11px] font-mono text-[#CBD5E1] mt-0.5">
+                  Pre-filled Draft
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Tab Content */}
-          <div className="py-4">
-            {activeTab === "paste" ? (
-              <textarea
-                value={documentText}
-                onChange={(e) => setDocumentText(e.target.value)}
-                rows={7}
-                placeholder="Paste offer letter, rental agreement, or contract clause here... (min. 20 characters)"
-                className="w-full bg-[#05070C]/70 text-[#F8FAFC] placeholder-slate-500 border border-white/10 rounded-xl p-4 text-[15px] font-mono leading-relaxed focus:outline-none focus:border-[#60A5FA] focus:ring-1 focus:ring-[#60A5FA]/30 transition-all resize-y min-h-[180px]"
-              />
-            ) : (
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                {!selectedFile ? (
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragging(true);
-                    }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={handleFileDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`rounded-xl border border-dashed p-8 text-center cursor-pointer transition-all ${
-                      isDragging
-                        ? "border-[#D4FF2A] bg-[#D4FF2A]/5 scale-[1.01]"
-                        : "border-white/15 hover:border-[#60A5FA]/60 bg-[#05070C]/60 hover:bg-[#05070C]/90"
-                    }`}
-                  >
-                    <div className="flex flex-col items-center justify-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#60A5FA]">
+          {/* Right Column: Floating Glass Command Stage */}
+          <div className="w-full">
+            <div className="rounded-2xl border border-[#60A5FA]/25 bg-white/[0.03] backdrop-blur-2xl p-5 sm:p-7 shadow-[0_0_60px_rgba(37,99,235,0.2)] hover:border-[#60A5FA]/40 transition-all duration-300 relative">
+              {loading ? (
+                /* Futuristic X-Ray Scanner Animation */
+                <div className="space-y-6 py-3 animate-fade-up">
+                  {/* Top Ticker + Telemetry Equalizer */}
+                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#D4FF2A] animate-ping" />
+                      <div>
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-[#60A5FA]">
+                          TELEMETRY STATUS
+                        </span>
+                        <div className="text-sm font-mono font-bold text-[#D4FF2A] tracking-wider">
+                          {SCAN_TICKER[activeStep]}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Equalizer Bars */}
+                    <div className="flex items-end gap-1 h-6 px-2.5 py-1 bg-[#05070C]/80 rounded-lg border border-white/10">
+                      <div className="w-1 bg-[#D4FF2A] rounded-full animate-eq-1" />
+                      <div className="w-1 bg-[#60A5FA] rounded-full animate-eq-2" />
+                      <div className="w-1 bg-[#D4FF2A] rounded-full animate-eq-3" />
+                      <div className="w-1 bg-[#2563EB] rounded-full animate-eq-4" />
+                      <div className="w-1 bg-[#D4FF2A] rounded-full animate-eq-5" />
+                    </div>
+                  </div>
+
+                  {/* Center Radar Pulse + Moving Laser Scanline */}
+                  <div className="relative rounded-xl bg-[#05070C]/90 border border-[#60A5FA]/30 p-8 overflow-hidden flex flex-col items-center justify-center min-h-[220px]">
+                    {/* Sweeping Laser Scanline */}
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none z-10">
+                      <div className="absolute left-0 right-0 h-[2.5px] bg-gradient-to-r from-transparent via-[#D4FF2A] to-[#60A5FA] blur-[0.5px] animate-xray-laser shadow-[0_0_15px_#D4FF2A]" />
+                    </div>
+
+                    {/* Concentric Radar Pulse Rings */}
+                    <div className="relative w-36 h-36 flex items-center justify-center z-0">
+                      <div className="absolute inset-0 rounded-full border border-[#2563EB]/40 animate-radar-pulse" />
+                      <div className="absolute w-24 h-24 rounded-full border border-[#60A5FA]/30 animate-ping opacity-25" />
+                      <div className="absolute w-14 h-14 rounded-full bg-[#2563EB]/20 border border-[#D4FF2A]/50 flex items-center justify-center shadow-[0_0_20px_rgba(212,255,42,0.2)]">
                         <svg
-                          className="w-6 h-6"
+                          className="w-6 h-6 text-[#D4FF2A]"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="2"
+                          strokeWidth="2.5"
                         >
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          <path d="m9 12 2 2 4-4" />
                         </svg>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          Drop PDF or DOCX contract here
-                        </p>
-                        <p className="text-xs text-[#CBD5E1] mt-1 font-mono">
-                          or <span className="text-[#60A5FA] underline">browse files</span> (.pdf, .docx, .txt up to 4 MB)
-                        </p>
-                      </div>
+                    </div>
+
+                    {/* Shimmer Placeholder Document Bars */}
+                    <div className="w-full max-w-xs space-y-2 mt-5 z-0">
+                      <div className="h-2 rounded-full bg-white/10 w-3/4 mx-auto animate-pulse" />
+                      <div className="h-2 rounded-full bg-white/15 w-full mx-auto animate-pulse" />
+                      <div className="h-2 rounded-full bg-white/10 w-5/6 mx-auto animate-pulse" />
                     </div>
                   </div>
-                ) : (
-                  <div className="p-4 rounded-xl bg-[#05070C]/90 border border-[#60A5FA]/40 flex items-center justify-between gap-3 animate-fade-up">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="px-2.5 py-1 rounded bg-[#2563EB]/20 text-[#60A5FA] text-xs font-mono font-bold uppercase shrink-0">
-                        {selectedFile.name.split(".").pop()}
-                      </span>
-                      <span className="text-sm font-medium text-white truncate">
-                        {selectedFile.name}
-                      </span>
-                      <span className="text-xs text-[#CBD5E1] font-mono shrink-0">
-                        • {(selectedFile.size / 1024).toFixed(1)} KB
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={removeFile}
-                      className="px-3 py-1.5 text-xs font-mono text-[#CBD5E1] hover:text-white hover:bg-white/10 rounded-lg transition-colors shrink-0"
-                    >
-                      Remove ✕
-                    </button>
+
+                  {/* Scanner Step Indicator */}
+                  <div className="grid grid-cols-4 gap-2 pt-1 font-mono text-[10px]">
+                    {SCAN_TICKER.map((step, idx) => {
+                      const isDone = idx < activeStep;
+                      const isCurrent = idx === activeStep;
+                      return (
+                        <div
+                          key={idx}
+                          className={`px-2 py-1.5 rounded-lg border text-center transition-all ${
+                            isCurrent
+                              ? "bg-[#2563EB]/20 border-[#60A5FA] text-[#D4FF2A] font-bold shadow-[0_0_10px_rgba(37,99,235,0.3)]"
+                              : isDone
+                              ? "bg-[#05070C] border-[#D4FF2A]/30 text-[#D4FF2A]"
+                              : "bg-[#05070C]/40 border-white/5 text-slate-500"
+                          }`}
+                        >
+                          <span>{isDone ? "✓" : `0${idx + 1}`}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-4 p-3.5 rounded-xl bg-[#2563EB]/10 border border-[#60A5FA]/40 text-sm text-[#F8FAFC] flex items-center gap-2.5 font-mono">
-              <span className="text-[#60A5FA] font-bold">!</span>
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Bottom Bar: Character / File Status + Acid Lime Pill CTA */}
-          <div className="flex items-center justify-between pt-4 border-t border-white/10">
-            <div className="text-xs font-mono text-[#CBD5E1]">
-              {activeTab === "paste" ? (
-                <span>
-                  <strong className="text-white font-semibold">
-                    {characterCount}
-                  </strong>{" "}
-                  chars
-                  {characterCount < 20 && (
-                    <span className="text-slate-500 ml-1.5">(min 20)</span>
-                  )}
-                </span>
+                </div>
               ) : (
-                <span>
-                  {selectedFile ? (
-                    <span className="text-[#D4FF2A] font-semibold">
-                      Ready to scan
-                    </span>
-                  ) : (
-                    <span className="text-slate-500">No file selected</span>
-                  )}
-                </span>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleScan}
-              disabled={!canScan || loading}
-              className="bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm px-7 py-2.5 rounded-full transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,255,42,0.25)] hover:shadow-[0_0_28px_rgba(212,255,42,0.4)] flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {loading ? "Scanning..." : "Run X-Ray Scan →"}
-            </button>
-          </div>
-        </div>
-
-        {/* Loading State: Confined Laser Scanner */}
-        {loading && (
-          <div className="mt-8 rounded-2xl border border-[#60A5FA]/30 bg-white/[0.03] backdrop-blur-2xl p-6 sm:p-8 overflow-hidden shadow-2xl relative animate-fade-up">
-            {/* Confined laser beam in background (z-0) */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-              <div className="absolute left-0 right-0 h-[2.5px] bg-gradient-to-r from-transparent via-[#D4FF2A] to-[#60A5FA] blur-[0.5px] animate-xray-laser shadow-[0_0_12px_#D4FF2A]" />
-            </div>
-
-            <div className="relative z-10">
-              <div className="flex items-center justify-between pb-4 mb-6 border-b border-white/10">
-                <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#D4FF2A] flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#D4FF2A] animate-ping"></span>
-                  Scanning Document
-                </span>
-                <span className="text-xs text-[#CBD5E1] font-mono">
-                  Step {activeStep + 1} of 4
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {SCAN_STEPS.map((step, idx) => {
-                  const isDone = idx < activeStep;
-                  const isCurrent = idx === activeStep;
-                  return (
-                    <div
-                      key={idx}
-                      className={`p-3.5 rounded-xl border transition-all duration-300 flex items-center gap-3 ${
-                        isDone
-                          ? "bg-[#05070C]/80 border-[#D4FF2A]/30 text-[#D4FF2A]"
-                          : isCurrent
-                          ? "bg-[#2563EB]/15 border-[#60A5FA]/60 text-white shadow-lg shadow-[#2563EB]/10"
-                          : "bg-[#05070C]/40 border-white/5 text-slate-500"
-                      }`}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
-                          isDone
-                            ? "bg-[#D4FF2A] text-[#05070C]"
-                            : isCurrent
-                            ? "bg-[#60A5FA] text-[#05070C] animate-pulse"
-                            : "bg-white/10 text-slate-400"
+                /* Interactive Input Command Stage */
+                <>
+                  {/* Top Bar: Segmented Tab Switch + Preset Dropdown */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                    {/* Segmented Tab Switch */}
+                    <div className="inline-flex p-1 rounded-xl bg-[#05070C]/90 border border-white/10 self-start shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab("paste");
+                          setError(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                          activeTab === "paste"
+                            ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/25"
+                            : "text-[#CBD5E1] hover:text-white"
                         }`}
                       >
-                        {isDone ? "✓" : idx + 1}
-                      </div>
-                      <span className="text-sm font-medium">{step}</span>
+                        Paste Clause
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab("upload");
+                          setError(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                          activeTab === "upload"
+                            ? "bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/25"
+                            : "text-[#CBD5E1] hover:text-white"
+                        }`}
+                      >
+                        Upload PDF / DOCX
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Interactive Document Type Preset Dropdown */}
+                    <div className="flex items-center gap-2" ref={dropdownRef}>
+                      <span className="text-slate-500 text-[11px] font-mono uppercase tracking-wider hidden sm:inline">
+                        Preset:
+                      </span>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setDocTypeOpen((prev) => !prev)}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#05070C]/90 border border-white/10 hover:border-[#60A5FA]/50 text-xs font-mono font-semibold text-[#60A5FA] hover:text-white transition-all flex items-center gap-2 shadow-sm"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA]" />
+                          <span>{docType}</span>
+                          <svg
+                            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                              docTypeOpen ? "rotate-180" : ""
+                            }`}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+
+                        {docTypeOpen && (
+                          <div className="absolute right-0 mt-2 w-48 rounded-xl bg-[#0A0F1C]/95 backdrop-blur-2xl border border-white/10 p-1.5 shadow-2xl z-30 animate-fade-up">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 px-3 py-1.5">
+                              Select Contract Type
+                            </div>
+                            {DOC_TYPES.map((type) => (
+                              <button
+                                key={type}
+                                type="button"
+                                onClick={() => handleSelectDocType(type)}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-mono transition-all flex items-center justify-between ${
+                                  docType === type
+                                    ? "bg-[#2563EB] text-white font-semibold"
+                                    : "text-[#CBD5E1] hover:text-white hover:bg-white/5"
+                                }`}
+                              >
+                                <span>{type}</span>
+                                {docType === type && (
+                                  <span className="text-xs">✓</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="py-4">
+                    {activeTab === "paste" ? (
+                      <textarea
+                        value={documentText}
+                        onChange={(e) => setDocumentText(e.target.value)}
+                        rows={6}
+                        placeholder="Paste offer letter, rental agreement, or contract clause here... (min. 20 characters)"
+                        className="w-full bg-[#05070C]/70 text-[#F8FAFC] placeholder-slate-500 border border-white/10 rounded-xl p-4 text-[15px] font-mono leading-relaxed focus:outline-none focus:border-[#60A5FA] focus:ring-1 focus:ring-[#60A5FA]/30 transition-all resize-y min-h-[170px]"
+                      />
+                    ) : (
+                      <div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.docx,.txt"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                        {!selectedFile ? (
+                          <div
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              setIsDragging(true);
+                            }}
+                            onDragLeave={() => setIsDragging(false)}
+                            onDrop={handleFileDrop}
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`rounded-xl border border-dashed p-7 text-center cursor-pointer transition-all ${
+                              isDragging
+                                ? "border-[#D4FF2A] bg-[#D4FF2A]/5 scale-[1.01]"
+                                : "border-white/15 hover:border-[#60A5FA]/60 bg-[#05070C]/60 hover:bg-[#05070C]/90"
+                            }`}
+                          >
+                            <div className="flex flex-col items-center justify-center gap-3">
+                              <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-[#60A5FA]">
+                                <svg
+                                  className="w-5 h-5"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="17 8 12 3 7 8" />
+                                  <line x1="12" y1="3" x2="12" y2="15" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-white">
+                                  Drop PDF or DOCX contract here
+                                </p>
+                                <p className="text-xs text-[#CBD5E1] mt-1 font-mono">
+                                  or <span className="text-[#60A5FA] underline">browse files</span> (.pdf, .docx, .txt up to 4 MB)
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-xl bg-[#05070C]/90 border border-[#60A5FA]/40 flex items-center justify-between gap-3 animate-fade-up">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="px-2.5 py-1 rounded bg-[#2563EB]/20 text-[#60A5FA] text-xs font-mono font-bold uppercase shrink-0">
+                                {selectedFile.name.split(".").pop()}
+                              </span>
+                              <span className="text-sm font-medium text-white truncate">
+                                {selectedFile.name}
+                              </span>
+                              <span className="text-xs text-[#CBD5E1] font-mono shrink-0">
+                                • {(selectedFile.size / 1024).toFixed(1)} KB
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={removeFile}
+                              className="px-3 py-1.5 text-xs font-mono text-[#CBD5E1] hover:text-white hover:bg-white/10 rounded-lg transition-colors shrink-0"
+                            >
+                              Remove ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Error Message */}
+                  {error && (
+                    <div className="mb-4 p-3 rounded-xl bg-[#2563EB]/10 border border-[#60A5FA]/40 text-sm text-[#F8FAFC] flex items-center gap-2.5 font-mono">
+                      <span className="text-[#60A5FA] font-bold">!</span>
+                      <span>{error}</span>
+                    </div>
+                  )}
+
+                  {/* Bottom Bar: Character Status + Run Button */}
+                  <div className="flex items-center justify-between pt-4 border-t border-white/10">
+                    <div className="text-xs font-mono text-[#CBD5E1]">
+                      {activeTab === "paste" ? (
+                        <span>
+                          <strong className="text-white font-semibold">
+                            {characterCount}
+                          </strong>{" "}
+                          chars
+                          {characterCount < 20 && (
+                            <span className="text-slate-500 ml-1.5">
+                              (min 20)
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span>
+                          {selectedFile ? (
+                            <span className="text-[#D4FF2A] font-semibold">
+                              Ready to scan
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">
+                              No file selected
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleScan}
+                      disabled={!canScan || loading}
+                      className="bg-[#D4FF2A] hover:bg-[#b8e617] text-[#05070C] font-bold text-sm px-7 py-2.5 rounded-full transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,255,42,0.25)] hover:shadow-[0_0_28px_rgba(212,255,42,0.4)] flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      Run X-Ray Scan →
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      </section>
 
       {/* Minimal, Ultra-Readable Results: max-w-7xl px-6 sm:px-8 lg:px-12 */}
       {result && !loading && (
         <section
           ref={resultsRef}
-          className="w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 mt-12 mb-20 space-y-8 animate-fade-up"
+          className="w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 mt-4 mb-20 space-y-8 animate-fade-up"
         >
           {/* Top Executive Verdict Banner (Frosted Glass 3-Part Bar) */}
           <div className="p-7 sm:p-8 rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-[#60A5FA]/40 hover:shadow-[0_12px_40px_rgba(37,99,235,0.18)] transition-all duration-300 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
@@ -938,7 +1020,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Clean 2-Column Hairline Results (Filtered dynamically) */}
+          {/* Clean 2-Column Hairline Results */}
           <div
             className={`grid grid-cols-1 ${
               resultFilter === "all"
@@ -1079,7 +1161,11 @@ export default function HomePage() {
 
             {/* Right Column: Sticky Pushback Negotiation Email */}
             {(resultFilter === "all" || resultFilter === "email") && (
-              <div className={resultFilter === "email" ? "max-w-2xl mx-auto w-full" : ""}>
+              <div
+                className={
+                  resultFilter === "email" ? "max-w-2xl mx-auto w-full" : ""
+                }
+              >
                 <div className="sticky top-24 rounded-2xl bg-white/[0.03] backdrop-blur-2xl border border-white/10 p-6 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-[#60A5FA]/40 hover:shadow-[0_12px_40px_rgba(37,99,235,0.18)] transition-all duration-300 space-y-5">
                   <div className="flex items-center justify-between pb-3 border-b border-white/10">
                     <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-[#60A5FA] flex items-center gap-2">
@@ -1120,7 +1206,9 @@ export default function HomePage() {
                     <a
                       href={`https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(
                         result.negotiationEmail.subject
-                      )}&body=${encodeURIComponent(result.negotiationEmail.body)}`}
+                      )}&body=${encodeURIComponent(
+                        result.negotiationEmail.body
+                      )}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full border border-[#60A5FA]/40 hover:border-[#60A5FA] text-[#60A5FA] hover:text-white hover:bg-[#2563EB]/15 font-bold text-sm py-2.5 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 text-center shadow-sm"
@@ -1135,7 +1223,7 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Minimal Footer: max-w-7xl px-6 sm:px-8 lg:px-12 */}
+      {/* Minimal Footer */}
       <footer className="mt-auto py-10 border-t border-white/10 text-center text-xs font-mono text-slate-500">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
           <p>
