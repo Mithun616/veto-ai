@@ -6,14 +6,13 @@ import {
   BASE_SYSTEM_PROMPT,
   extractJsonObject,
   normalizeAnalysisResult,
-  runLocalClauseAnalysis,
   validateDocumentText,
   validateFileMetadata,
 } from "@/lib/veto";
 
 export const maxDuration = 60;
 
-const GEMINI_TIMEOUT_MS = 8000; // 8s timeout per model attempt
+const GEMINI_TIMEOUT_MS = 12000; // 12s timeout per model attempt (ensures gemini-3.6-flash completes)
 
 export async function POST(req: NextRequest) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -265,7 +264,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ---------------------------------------------------------------------------
-  // 6. Provider #2: Groq (llama-3.3-70b-versatile, ultra-fast)
+  // 6. Provider #2: Groq (qwen/qwen3.8-27b -> openai/gpt-oss-120b, ultra-fast)
   // ---------------------------------------------------------------------------
   if (
     !responseText &&
@@ -273,56 +272,62 @@ export async function POST(req: NextRequest) {
     groqApiKey.trim() !== "" &&
     documentText.trim().length >= 20
   ) {
-    try {
-      console.log(
-        "[VetoAI] Attempting Groq fallback with llama-3.3-70b-versatile..."
-      );
-      const groqResponse = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${groqApiKey.trim()}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            response_format: { type: "json_object" },
-            messages: [
-              {
-                role: "system",
-                content: `${BASE_SYSTEM_PROMPT}\n\nIMPORTANT: Respond ONLY with a valid JSON object matching the requested schema.`,
-              },
-              {
-                role: "user",
-                content: `DOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`,
-              },
-            ],
-          }),
-          signal: AbortSignal.timeout(15000),
-        }
-      );
+    const groqModels = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"];
 
-      if (groqResponse.ok) {
-        const groqData = await groqResponse.json();
-        const content = groqData.choices?.[0]?.message?.content;
-        if (content) {
-          responseText = content;
-          console.log(
-            "[VetoAI] Successfully received analysis from Groq (llama-3.3-70b-versatile)."
+    for (const groqModel of groqModels) {
+      try {
+        console.log(
+          `[VetoAI] Attempting Groq fallback with model: ${groqModel}...`
+        );
+        const groqResponse = await fetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${groqApiKey.trim()}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: groqModel,
+              response_format: { type: "json_object" },
+              messages: [
+                {
+                  role: "system",
+                  content: `${BASE_SYSTEM_PROMPT}\n\nIMPORTANT: Respond ONLY with a valid JSON object matching the requested schema.`,
+                },
+                {
+                  role: "user",
+                  content: `DOCUMENT TO ANALYZE:\n"""\n${documentText}\n"""`,
+                },
+              ],
+              max_tokens: 3000,
+            }),
+            signal: AbortSignal.timeout(15000),
+          }
+        );
+
+        if (groqResponse.ok) {
+          const groqData = await groqResponse.json();
+          const content = groqData.choices?.[0]?.message?.content;
+          if (content) {
+            responseText = content;
+            console.log(
+              `[VetoAI] Successfully received analysis from Groq model: ${groqModel}`
+            );
+            break;
+          }
+        } else {
+          const errText = await groqResponse.text().catch(() => "");
+          console.warn(
+            `[VetoAI] Groq model ${groqModel} returned status ${groqResponse.status}: ${errText.substring(
+              0,
+              100
+            )}`
           );
         }
-      } else {
-        const errText = await groqResponse.text().catch(() => "");
-        console.warn(
-          `[VetoAI] Groq returned status ${groqResponse.status}: ${errText.substring(
-            0,
-            100
-          )}`
-        );
+      } catch (groqErr) {
+        console.warn(`[VetoAI] Groq model ${groqModel} failed:`, groqErr);
       }
-    } catch (groqErr) {
-      console.warn("[VetoAI] Groq fallback failed:", groqErr);
     }
   }
 
@@ -397,32 +402,53 @@ export async function POST(req: NextRequest) {
   }
 
   // ---------------------------------------------------------------------------
-  // 8. Provider #4: Local Deterministic Clause-Pattern Fallback
-  // Guarantees zero failures and demo reliability even if all remote models fail.
+  // 8. Honest Error Handling If All Providers Fail
+  // Do NOT fabricate canned findings or pretend an outage was a successful scan.
   // ---------------------------------------------------------------------------
   if (!responseText) {
-    console.log(
-      "[VetoAI] All remote LLMs unavailable or timed out. Engaging Local Clause-Pattern Fallback..."
+    console.warn(
+      "[VetoAI] All remote LLMs unavailable or timed out. Reporting honest retry state."
     );
-    const localResult = runLocalClauseAnalysis(documentText);
-    return NextResponse.json(localResult);
+    return NextResponse.json(
+      {
+        error:
+          "AI review services are temporarily unavailable. Please check your network or try again in a few moments.",
+      },
+      { status: 503 }
+    );
   }
 
   // ---------------------------------------------------------------------------
-  // 9. Parse and Sanitize Final Output
+  // 9. Parse and Sanitize Final Output with Strict Source Verification
   // ---------------------------------------------------------------------------
   let rawParsed: unknown;
   try {
     rawParsed = extractJsonObject(responseText);
   } catch (parseErr) {
     console.warn(
-      "[VetoAI] Failed to parse model response, running local clause analysis fallback:",
+      "[VetoAI] Failed to extract structured JSON from model response:",
       parseErr
     );
-    const fallbackResult = runLocalClauseAnalysis(documentText);
-    return NextResponse.json(fallbackResult);
+    return NextResponse.json(
+      {
+        error:
+          "The AI model returned an unparseable response. Please retry your review.",
+      },
+      { status: 502 }
+    );
   }
 
-  const finalResult = normalizeAnalysisResult(rawParsed, documentText);
-  return NextResponse.json(finalResult);
+  try {
+    const finalResult = normalizeAnalysisResult(rawParsed, documentText);
+    return NextResponse.json(finalResult);
+  } catch (normErr: unknown) {
+    console.error("[VetoAI] Output validation error:", normErr);
+    return NextResponse.json(
+      {
+        error:
+          "Unable to verify analysis findings against the submitted document. Please retry.",
+      },
+      { status: 500 }
+    );
+  }
 }

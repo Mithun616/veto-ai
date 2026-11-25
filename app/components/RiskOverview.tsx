@@ -52,7 +52,7 @@ export function RiskOverview({ result }: RiskOverviewProps) {
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: meta.barColor }}
               />
-              {overallRisk} Risk ({riskScore} / 100)
+              AI Review Indicator: {overallRisk} Risk ({riskScore} / 100)
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-[#F5F7FA]">
@@ -70,7 +70,7 @@ export function RiskOverview({ result }: RiskOverviewProps) {
               {flaggedClauses?.length ?? 0}
             </div>
             <div className="text-[11px] text-[#738094] uppercase tracking-wider font-medium">
-              Flagged
+              Verified Flagged
             </div>
           </div>
           <div className="px-3 py-2 rounded-xl bg-[#161B23] border border-[#F59E0B]/20 text-center min-w-[100px]">
@@ -83,6 +83,45 @@ export function RiskOverview({ result }: RiskOverviewProps) {
           </div>
         </div>
       </div>
+
+      {/* Incomplete review warning if unverified items were dropped */}
+      {result.unverifiedCount !== undefined && result.unverifiedCount > 0 && (
+        <div
+          role="status"
+          className="p-3.5 rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 flex items-start gap-2.5 text-xs text-[#F59E0B]"
+        >
+          <svg
+            className="w-4 h-4 shrink-0 mt-0.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <div>
+            <strong>Incomplete Review Notice:</strong> {result.unverifiedCount} candidate finding(s) returned by the AI model could not be verified verbatim against your submitted document text and were excluded from this report and the negotiation email to preserve review integrity.
+          </div>
+        </div>
+      )}
+
+      {/* Empty / Unverified findings state */}
+      {(!flaggedClauses || flaggedClauses.length === 0) && (
+        <div
+          role="status"
+          className="p-4 rounded-xl bg-[#161B23] border border-white/10 text-center space-y-2"
+        >
+          <div className="text-sm font-medium text-[#F5F7FA]">
+            No verified clause risks were confirmed in the supplied text.
+          </div>
+          <p className="text-xs text-[#ABB5C5]">
+            If you provided a partial excerpt or want a deeper review of other sections, ensure the full text is provided and re-run the analysis.
+          </p>
+        </div>
+      )}
 
       {/* Visual Risk Gauge Meter */}
       <div className="space-y-2">

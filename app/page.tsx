@@ -72,6 +72,8 @@ export default function HomePage() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
 
   // Subscribe to Firebase auth changes on mount
   useEffect(() => {
@@ -96,10 +98,7 @@ export default function HomePage() {
     if (!result?.flaggedClauses) return [];
     const identified = result.flaggedClauses.map((clause, idx) => ({
       clause,
-      id: `clause-${idx}-${clause.title
-        .replace(/[^a-zA-Z0-9]/g, "-")
-        .toLowerCase()
-        .slice(0, 24)}`,
+      id: clause.id || `clause-${idx + 1}`,
       originalIndex: idx,
       severity: getNormalizedSeverity(clause.risk),
     }));
@@ -148,14 +147,19 @@ export default function HomePage() {
     }
   };
 
-  // Try a sample (populates text, switches tab, does NOT auto-submit)
+  // Try a sample (populates text, switches tab, clears previous results & cancels in-flight requests)
   const handleLoadSample = (type: "internship" | "rental") => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     const sampleText = type === "internship" ? SAMPLE_INTERNSHIP : SAMPLE_RENTAL;
     setActiveTab("paste");
     setDocumentText(sampleText);
     setSelectedFile(null);
     setError(null);
+    setResult(null);
     setIsStale(false);
+    setUserToggledIds({});
 
     handleScrollToWorkspace();
   };
@@ -200,14 +204,18 @@ export default function HomePage() {
   };
 
   const handleClear = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     setDocumentText("");
     setSelectedFile(null);
     setError(null);
+    setResult(null);
     setIsStale(false);
     setUserToggledIds({});
   };
 
-  // Submit for analysis
+  // Submit for analysis with request cancellation & race condition handling
   const handleSubmit = async () => {
     if (loading) return;
 
@@ -221,6 +229,14 @@ export default function HomePage() {
       return;
     }
 
+    // Cancel any previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentRequestId = ++requestIdRef.current;
+
     setLoading(true);
     setError(null);
 
@@ -233,16 +249,23 @@ export default function HomePage() {
         response = await fetch("/api/analyze", {
           method: "POST",
           body: formData,
+          signal: controller.signal,
         });
       } else {
         response = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ documentText }),
+          signal: controller.signal,
         });
       }
 
       const data = await response.json();
+
+      // Ignore responses from superseded requests
+      if (currentRequestId !== requestIdRef.current) {
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Analysis failed. Please try again.");
@@ -278,13 +301,21 @@ export default function HomePage() {
         resultsRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return; // Request was cleanly cancelled, ignore
+      }
+      if (currentRequestId !== requestIdRef.current) {
+        return; // Outdated request, ignore
+      }
       const message =
         err instanceof Error
           ? err.message
           : "Unable to complete analysis. Please try again in a few moments.";
       setError(message);
     } finally {
-      setLoading(false);
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -482,8 +513,8 @@ export default function HomePage() {
                   <div className="space-y-3">
                     {result.missingProtections.map((protection, idx) => (
                       <MissingProtectionCard
-                        key={`protection-${idx}`}
-                        id={`protection-${idx}`}
+                        key={protection.id || `protection-${idx + 1}`}
+                        id={protection.id || `protection-${idx + 1}`}
                         protection={protection}
                         index={idx}
                       />
@@ -501,6 +532,7 @@ export default function HomePage() {
                 <NegotiationEmailCard
                   email={result.negotiationEmail}
                   userName={user?.displayName}
+                  isStale={isStale}
                 />
               )}
 

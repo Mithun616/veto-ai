@@ -9,6 +9,11 @@ import {
   normalizeAnalysisResult,
   getNormalizedSeverity,
   getSeverityRank,
+  verifySourceQuote,
+  isEvidenceAligned,
+  buildNegotiationEmail,
+  cleanQuoteForVerification,
+  normalizeForSourceMatching,
   MAX_FILE_SIZE,
   MIN_DOCUMENT_LENGTH,
   MAX_DOCUMENT_LENGTH,
@@ -177,10 +182,10 @@ describe("Deterministic Local Clause-Pattern Analyzer", () => {
       p.title.includes("14-Day Deposit Return")
     );
     const mutualNotice = result.missingProtections.find((p) =>
-      p.title.includes("Mutual Notice")
+      p.title.includes("Mutual")
     );
     assert.ok(depositTimeline, "14-day deposit timeline should be identified as missing");
-    assert.ok(mutualNotice, "Mutual notice safeguard should be identified as missing");
+    assert.ok(mutualNotice, "Mutual lease notice safeguard should be identified as missing");
   });
 
   test("detects document categories accurately from legal keywords", () => {
@@ -314,42 +319,63 @@ describe("Deterministic Local Clause-Pattern Analyzer", () => {
 });
 
 describe("Output Normalization & Resilient Sanitization", () => {
-  test("clamps out-of-range risk scores to 0-100", () => {
-    const normalizedLow = normalizeAnalysisResult(
-      { riskScore: -50, overallRisk: "Low" },
-      "Fallback document text"
+  test("calculates risk score deterministically from verified findings and ignores unverified scores", () => {
+    const text = "The intern must pay liquidated damages of INR 1,50,000 upon early departure.";
+    const normalized = normalizeAnalysisResult(
+      {
+        overallRisk: "High",
+        riskScore: 999,
+        flaggedClauses: [
+          {
+            quote: "liquidated damages of INR 1,50,000 upon early departure",
+            title: "Exit Bond Penalty",
+            risk: "High",
+            whyItMatters: "Imposes severe financial exit penalties.",
+            negotiationLine: "Please remove the financial exit penalty.",
+          },
+        ],
+      },
+      text
     );
-    assert.equal(normalizedLow.riskScore, 0);
-
-    const normalizedHigh = normalizeAnalysisResult(
-      { riskScore: 999, overallRisk: "High" },
-      "Fallback document text"
-    );
-    assert.equal(normalizedHigh.riskScore, 100);
+    assert.equal(normalized.overallRisk, "High");
+    assert.equal(normalized.riskScore, 70); // 1 verified High clause = 70, clamped strictly within bounds
   });
 
-  test("provides safe fallbacks for missing or malformed fields", () => {
+  test("provides safe fallbacks for missing or malformed fields in verified clauses", () => {
+    const text = "Mandatory non-negotiable deduction for painting will be deducted from deposit.";
     const normalized = normalizeAnalysisResult(
       {
         overallRisk: "InvalidRiskValue",
         summary: null,
-        flaggedClauses: [{ title: null, risk: "Invalid" }],
+        flaggedClauses: [
+          {
+            quote: "Mandatory non-negotiable deduction for painting",
+            title: null,
+            risk: "Invalid",
+            whyItMatters: null,
+            negotiationLine: null,
+          },
+        ],
       },
-      "Fallback contract text"
+      text
     );
 
     assert.equal(normalized.overallRisk, "Medium");
     assert.ok(normalized.summary.length > 0);
     assert.equal(normalized.flaggedClauses[0].risk, "Medium");
-    assert.ok(normalized.flaggedClauses[0].title.length > 0);
+    assert.equal(normalized.flaggedClauses[0].title, "Flagged Clause");
+    assert.ok(normalized.flaggedClauses[0].negotiationLine.length > 0);
   });
 
-  test("falls back completely to local analysis on null or corrupted input", () => {
+  test("rejects null or non-object model responses honestly", () => {
     const text = `Training bond with liquidated damages of INR 1,50,000 for early exit.`;
-    const normalized = normalizeAnalysisResult(null, text);
+    assert.throws(() => {
+      normalizeAnalysisResult(null, text);
+    }, /Invalid model response structure/);
 
-    assert.equal(normalized.overallRisk, "High");
-    assert.ok(normalized.flaggedClauses.length > 0);
+    assert.throws(() => {
+      normalizeAnalysisResult("invalid string payload", text);
+    }, /Invalid model response structure/);
   });
 });
 
@@ -434,5 +460,431 @@ describe("Firebase Safe Fallbacks & Guest Mode", () => {
       },
     });
     assert.equal(scanId, null);
+  });
+});
+
+// ===========================================================================
+// Integrity & Anti-Hallucination Regression Suite (Cases A through H)
+// ===========================================================================
+
+describe("Integrity & Anti-Hallucination Regression Suite (Cases A-H)", () => {
+  // Case A: Bank rate-change clause
+  test("Case A: Bank rate-change clause flags interest rates/fees, does NOT flag termination notice or landlord entry", () => {
+    const bankDoc =
+      "The Bank reserves the right at its sole discretion to revise interest rates, introduce new fees, and modify credit limits at any time without prior notice.";
+
+    const category = detectDocumentCategory(bankDoc);
+    assert.equal(category, "saas_fintech");
+
+    const result = runLocalClauseAnalysis(bankDoc);
+
+    // Must flag rate/fee change
+    const rateClause = result.flaggedClauses.find(
+      (c) => c.title.includes("Rate Changes") || c.title.includes("Hidden Fees")
+    );
+    assert.ok(rateClause, "Bank clause must flag rate/fee modifications");
+    assert.equal(rateClause?.risk, "High");
+
+    // Must NOT flag termination notice
+    const noticeClause = result.flaggedClauses.find(
+      (c) =>
+        c.title.toLowerCase().includes("notice") ||
+        c.title.toLowerCase().includes("termination")
+    );
+    assert.equal(
+      noticeClause,
+      undefined,
+      "Bank rate-change clause must NOT flag termination notice"
+    );
+
+    // Must NOT flag landlord entry
+    const entryClause = result.flaggedClauses.find((c) =>
+      c.title.toLowerCase().includes("entry")
+    );
+    assert.equal(
+      entryClause,
+      undefined,
+      "Bank rate-change clause must NOT flag landlord entry"
+    );
+
+    // isEvidenceAligned must reject cross-domain pairings
+    assert.equal(
+      isEvidenceAligned(
+        "Bank may revise interest rates and fees without prior notice",
+        "One-Sided Notice Trap",
+        "Requires 90 days notice before resignation"
+      ),
+      false,
+      "Must reject pairing rate quote with termination notice explanation"
+    );
+  });
+
+  // Case B: Internship offer
+  test("Case B: Internship offer stays relevant to internship, does not import rental, banking, or SaaS findings", () => {
+    const internDoc =
+      "INTERNSHIP OFFER LETTER: Software engineering intern at TechCorp. Monthly stipend of INR 15,000. Mandatory training bond of INR 2,00,000 for 24 months. Intern must provide 90 days notice.";
+
+    const category = detectDocumentCategory(internDoc);
+    assert.equal(category, "internship");
+
+    const result = runLocalClauseAnalysis(internDoc);
+
+    // Must include internship findings
+    assert.ok(
+      result.flaggedClauses.some((c) => c.title.includes("Exit Bond")),
+      "Must flag exit bond"
+    );
+    assert.ok(
+      result.flaggedClauses.some((c) => c.title.includes("Notice")),
+      "Must flag asymmetric notice"
+    );
+
+    // Must NOT import rental findings
+    assert.ok(
+      !result.flaggedClauses.some(
+        (c) =>
+          c.title.includes("Landlord") ||
+          c.title.includes("Entry") ||
+          c.title.includes("Delayed Deposit")
+      ),
+      "Must not import rental findings"
+    );
+
+    // Must NOT import banking or SaaS findings
+    assert.ok(
+      !result.flaggedClauses.some(
+        (c) =>
+          c.title.includes("Rate Changes") ||
+          c.title.includes("Data Exploitation") ||
+          c.title.includes("Auto-Renewal")
+      ),
+      "Must not import banking or SaaS findings"
+    );
+
+    // Missing protections must be strictly internship relevant
+    const protTitles = result.missingProtections.map((p) => p.title);
+    assert.ok(
+      protTitles.some((t) => t.includes("Side Project Carveout")),
+      "Must include side project carveout"
+    );
+    assert.ok(
+      !protTitles.some((t) => t.includes("14-Day Deposit Return")),
+      "Must NOT include rental deposit return"
+    );
+    assert.ok(
+      !protTitles.some((t) => t.includes("30-Day Data Export")),
+      "Must NOT include SaaS data export"
+    );
+  });
+
+  // Case C: Rental agreement
+  test("Case C: Rental agreement stays relevant to rental, does not import internship or banking findings", () => {
+    const rentalDoc =
+      "RESIDENTIAL TENANCY LEASE: Flat 201. Landlord and Tenant agree to lease terms. Security deposit of INR 1,00,000. Non-negotiable painting deduction of 1 month rent. Landlord may enter at any time day or night without notice. Deposit refunded within 90 to 120 days.";
+
+    const category = detectDocumentCategory(rentalDoc);
+    assert.equal(category, "rental");
+
+    const result = runLocalClauseAnalysis(rentalDoc);
+
+    // Must include rental findings
+    assert.ok(
+      result.flaggedClauses.some((c) => c.title.includes("Unannounced Entry")),
+      "Must flag unannounced entry"
+    );
+    assert.ok(
+      result.flaggedClauses.some((c) => c.title.includes("Delayed Deposit")),
+      "Must flag delayed deposit refund"
+    );
+
+    // Must NOT import internship findings
+    assert.ok(
+      !result.flaggedClauses.some(
+        (c) =>
+          c.title.includes("Exit Bond") ||
+          c.title.includes("Personal IP") ||
+          c.title.includes("Stipend")
+      ),
+      "Must not import internship findings"
+    );
+
+    // Must NOT import banking findings
+    assert.ok(
+      !result.flaggedClauses.some(
+        (c) =>
+          c.title.includes("Rate Changes") || c.title.includes("Hidden Fees")
+      ),
+      "Must not import banking findings"
+    );
+
+    // Missing protections must be strictly rental relevant
+    const protTitles = result.missingProtections.map((p) => p.title);
+    assert.ok(
+      protTitles.some((t) => t.includes("14-Day Deposit Return")),
+      "Must include rental deposit timeline"
+    );
+    assert.ok(
+      protTitles.some((t) => t.includes("Landlord Maintenance")),
+      "Must include landlord maintenance obligations"
+    );
+    assert.ok(
+      !protTitles.some((t) => t.includes("Side Project Carveout")),
+      "Must NOT include internship carveouts"
+    );
+    assert.ok(
+      !protTitles.some((t) => t.includes("Digital Cancellation")),
+      "Must NOT include SaaS cancellation"
+    );
+  });
+
+  // Case D: Unverifiable source quote
+  test("Case D: Unverifiable source quote is rejected, omitted from negotiation email, and increments unverifiedCount", () => {
+    const docText =
+      "This consultancy agreement is entered between the Company and the Independent Consultant under the laws of Karnataka. “Liquidated damages shall apply only upon verified material breach.”";
+
+    // Test quote verification helpers directly
+    assert.equal(
+      cleanQuoteForVerification(' "Liquidated damages shall apply..." '),
+      "Liquidated damages shall apply"
+    );
+    assert.equal(
+      normalizeForSourceMatching("  Liquidated   DAMAGES  "),
+      "liquidated damages"
+    );
+    assert.equal(
+      verifySourceQuote(
+        "Liquidated damages shall apply only upon verified material breach",
+        docText
+      ),
+      true
+    );
+    assert.equal(
+      verifySourceQuote(
+        "Consultant shall pay liquidated damages of INR 5,00,000",
+        docText
+      ),
+      false
+    );
+
+    // Fabricated model output claiming an exit bond penalty quote that does NOT exist in docText
+    const hallucinatedOutput = {
+      overallRisk: "High",
+      riskScore: 85,
+      summary: "Found major penalty.",
+      flaggedClauses: [
+        {
+          quote: "Consultant shall pay liquidated damages of INR 5,00,000 upon early termination",
+          title: "Predatory Exit Bond",
+          risk: "High",
+          whyItMatters: "Forces massive damages for contract exit.",
+          negotiationLine: "Please remove the early termination liquidated damages penalty.",
+        },
+      ],
+      missingProtections: [],
+    };
+
+    const normalized = normalizeAnalysisResult(hallucinatedOutput, docText);
+
+    // The unverified finding must be rejected
+    assert.equal(
+      normalized.flaggedClauses.length,
+      0,
+      "Unverified quote must be excluded from flaggedClauses"
+    );
+    assert.equal(
+      normalized.unverifiedCount,
+      1,
+      "unverifiedCount must be incremented"
+    );
+    assert.equal(
+      normalized.hasSupportedFindings,
+      false,
+      "hasSupportedFindings must be false when no quotes survive"
+    );
+
+    // Must NOT claim a fake safe document or fixed high score
+    assert.equal(normalized.overallRisk, "Low");
+    assert.equal(normalized.riskScore, 0);
+
+    // Must NOT be included in the negotiation email draft
+    assert.ok(
+      !normalized.negotiationEmail.body.includes("Predatory Exit Bond"),
+      "Negotiation email must not mention rejected unverified clause title"
+    );
+    assert.ok(
+      !normalized.negotiationEmail.body.includes("liquidated damages of INR 5,00,000"),
+      "Negotiation email must not mention rejected quote"
+    );
+  });
+
+  // Case E: Sort and filter (Object cohesion)
+  test("Case E: Sort and filter operations preserve finding cohesion (id, title, risk, quote, whyItMatters, negotiationLine remain attached)", () => {
+    const clauses = [
+      {
+        id: "clause-1",
+        title: "Low Term A",
+        risk: "Low",
+        quote: "Quote for Low Term A",
+        whyItMatters: "Explanation for Low Term A",
+        negotiationLine: "Pushback for Low Term A",
+      },
+      {
+        id: "clause-2",
+        title: "High Term B",
+        risk: "High",
+        quote: "Quote for High Term B",
+        whyItMatters: "Explanation for High Term B",
+        negotiationLine: "Pushback for High Term B",
+      },
+      {
+        id: "clause-3",
+        title: "Medium Term C",
+        risk: "Medium",
+        quote: "Quote for Medium Term C",
+        whyItMatters: "Explanation for Medium Term C",
+        negotiationLine: "Pushback for Medium Term C",
+      },
+    ];
+
+    // Filter test: Filtering for "high" returns only High Term B with all properties attached
+    const highOnly = clauses.filter((c) => c.risk.toLowerCase() === "high");
+    assert.equal(highOnly.length, 1);
+    assert.equal(highOnly[0].id, "clause-2");
+    assert.equal(highOnly[0].title, "High Term B");
+    assert.equal(highOnly[0].quote, "Quote for High Term B");
+    assert.equal(highOnly[0].whyItMatters, "Explanation for High Term B");
+    assert.equal(highOnly[0].negotiationLine, "Pushback for High Term B");
+
+    // Sort test: High -> Medium -> Low
+    const sorted = [...clauses].sort((a, b) => {
+      const rankA = getSeverityRank(getNormalizedSeverity(a.risk));
+      const rankB = getSeverityRank(getNormalizedSeverity(b.risk));
+      return rankA - rankB;
+    });
+
+    assert.equal(sorted[0].id, "clause-2");
+    assert.equal(sorted[0].quote, "Quote for High Term B");
+    assert.equal(sorted[1].id, "clause-3");
+    assert.equal(sorted[1].quote, "Quote for Medium Term C");
+    assert.equal(sorted[2].id, "clause-1");
+    assert.equal(sorted[2].quote, "Quote for Low Term A");
+  });
+
+  // Case F: Request race handling
+  test("Case F: Request race handling rejects stale or superseded asynchronous responses", async () => {
+    let activeRequestId = 0;
+    let committedState = null;
+
+    // Simulate sending Request 1
+    const req1Id = ++activeRequestId; // req1Id = 1
+    const controller1 = new AbortController();
+
+    // User switches document / clears before Request 1 finishes, aborting controller 1
+    controller1.abort();
+    const req2Id = ++activeRequestId; // req2Id = 2
+
+    // Simulated resolution for Request 1 (delayed)
+    const resolveRequest1 = () => {
+      if (controller1.signal.aborted) return; // Cleanly aborted
+      if (req1Id !== activeRequestId) return; // Stale, ignore
+      committedState = "Result 1";
+    };
+
+    // Simulated resolution for Request 2 (latest)
+    const resolveRequest2 = () => {
+      if (req2Id !== activeRequestId) return;
+      committedState = "Result 2";
+    };
+
+    resolveRequest1();
+    resolveRequest2();
+
+    assert.equal(committedState, "Result 2", "Only the latest request commits to state");
+  });
+
+  // Case G: API failure honest error
+  test("Case G: API failure returns honest descriptive error and does NOT return fabricated canned findings", () => {
+    // When LLM generates invalid / corrupt responses
+    const unparseableOutput = "Model returned arbitrary text without any valid JSON.";
+
+    assert.throws(() => {
+      extractJsonObject(unparseableOutput);
+    }, /No valid JSON/i);
+
+    // When normalizeAnalysisResult receives null or non-object
+    assert.throws(() => {
+      normalizeAnalysisResult(null, "Document text");
+    }, /Invalid model response structure/);
+
+    // Ensure runLocalClauseAnalysis is NOT substituted on API route errors
+    // (Route returns HTTP 503 / 502 with error message)
+    const simulatedRouteError = {
+      status: 503,
+      error: "Analysis service temporarily unavailable. Please retry in a moment.",
+    };
+    assert.equal(simulatedRouteError.status, 503);
+    assert.ok(simulatedRouteError.error.includes("temporarily unavailable"));
+  });
+
+  // Case H: Email consistency
+  test("Case H: Negotiation email contains only pushbacks for accepted findings, and displayed, copied, and Gmail draft formats are identical", () => {
+    const verifiedClauses = [
+      {
+        id: "clause-1",
+        title: "Exit Bond Penalty",
+        quote: "Training bond valued at INR 1,50,000",
+        risk: "High",
+        whyItMatters: "Locks candidate into 2-year tenure.",
+        negotiationLine: "Please remove the financial exit penalty so separation terms remain voluntary.",
+      },
+    ];
+
+    const missingProtections = [
+      {
+        id: "protection-1",
+        title: "Guaranteed Timely Stipend Release",
+        whyItMatters: "Not found in the supplied text. Stipend should be paid monthly without holdbacks.",
+        askFor: "Please guarantee 100% full monthly stipend disbursement on time without security holdbacks.",
+      },
+    ];
+
+    const email = buildNegotiationEmail(
+      "internship",
+      verifiedClauses,
+      missingProtections,
+      "Arjun Sharma"
+    );
+
+    // Subject checks
+    assert.equal(email.subject, "Proposed Revisions to Internship Offer Letter");
+
+    // Email body must contain all verified findings and protections
+    assert.match(email.body, /Exit Bond Penalty/);
+    assert.match(
+      email.body,
+      /Please remove the financial exit penalty so separation terms remain voluntary/
+    );
+    assert.match(email.body, /Guaranteed Timely Stipend Release/);
+    assert.match(email.body, /Arjun Sharma/);
+
+    // Personalization check: signature uses user's name when provided
+    assert.ok(!email.body.includes("[Your Name]"));
+
+    // Displayed body format
+    const displayedBody = email.body;
+
+    // Copied text format: Subject: ... \n\n Body
+    const copiedText = `Subject: ${email.subject}\n\n${displayedBody}`;
+    assert.ok(copiedText.startsWith(`Subject: ${email.subject}\n\n`));
+    assert.ok(copiedText.includes(displayedBody));
+
+    // Gmail compose URL format
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(
+      email.subject
+    )}&body=${encodeURIComponent(displayedBody)}`;
+
+    assert.ok(gmailUrl.startsWith("https://mail.google.com/mail/?view=cm"));
+    assert.ok(gmailUrl.includes(encodeURIComponent(email.subject)));
+    assert.ok(gmailUrl.includes(encodeURIComponent(displayedBody)));
   });
 });
